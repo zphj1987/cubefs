@@ -61,6 +61,10 @@ func (t *topology) clear() {
 		t.metaNodes.Delete(key)
 		return true
 	})
+	t.ecNodes.Range(func(key, value interface{}) bool {
+		t.ecNodes.Delete(key)
+		return true
+	})
 }
 
 func (t *topology) putZone(zone *Zone) (err error) {
@@ -127,6 +131,15 @@ func (t *topology) putEcNode(ecNode *ECNode) (err error) {
 	}
 	zone.putEcNode(ecNode)
 	return
+}
+
+func (t *topology) deleteEcNode(ecNode *ECNode) {
+	t.ecNodes.Delete(ecNode.Addr)
+	zone, err := t.getZone(ecNode.ZoneName)
+	if err != nil {
+		return
+	}
+	zone.ecNodes.Delete(ecNode.Addr)
 }
 
 func (t *topology) putDataNodeToCache(dataNode *DataNode) {
@@ -435,8 +448,8 @@ func (t *topology) allocZonesForEcNode(zoneNum, replicaNum int, excludeZones []s
 	}
 	if len(candidateZones) < zoneNum {
 		log.LogError(fmt.Sprintf("action[allocZonesForEcNode],reqZoneNum[%v],candidateZones[%v],demandWriteNodes[%v],err:%v",
-			zoneNum, len(candidateZones), demandWriteNodes, proto.ErrNoZoneToCreateDataPartition))
-		return nil, errors.NewError(proto.ErrNoZoneToCreateDataPartition)
+			zoneNum, len(candidateZones), demandWriteNodes, proto.ErrNoZoneToCreateECPartition))
+		return nil, errors.NewError(proto.ErrNoZoneToCreateECPartition)
 	}
 	zones = candidateZones
 	err = nil

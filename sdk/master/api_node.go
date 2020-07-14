@@ -61,6 +61,16 @@ func (api *NodeAPI) AddEcNode(serverAddr string) (id uint64, err error) {
 	return
 }
 
+func (api *NodeAPI) EcNodeDecommission(nodeAddr string) (err error) {
+	var request = newAPIRequest(http.MethodGet, proto.DecommissionEcNode)
+	request.addParam("addr", nodeAddr)
+	request.addHeader("isTimeOut", "false")
+	if _, err = api.mc.serveRequest(request); err != nil {
+		return
+	}
+	return
+}
+
 func (api *NodeAPI) GetDataNode(serverHost string) (node *proto.DataNodeInfo, err error) {
 	var buf []byte
 	var request = newAPIRequest(http.MethodGet, proto.GetDataNode)
@@ -69,6 +79,20 @@ func (api *NodeAPI) GetDataNode(serverHost string) (node *proto.DataNodeInfo, er
 		return
 	}
 	node = &proto.DataNodeInfo{}
+	if err = json.Unmarshal(buf, &node); err != nil {
+		return
+	}
+	return
+}
+
+func (api *NodeAPI) GetEcNode(serverHost string) (node *proto.EcNodeInfo, err error) {
+	var buf []byte
+	var request = newAPIRequest(http.MethodGet, proto.GetEcNode)
+	request.addParam("addr", serverHost)
+	if buf, err = api.mc.serveRequest(request); err != nil {
+		return
+	}
+	node = &proto.EcNodeInfo{}
 	if err = json.Unmarshal(buf, &node); err != nil {
 		return
 	}

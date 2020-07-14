@@ -46,6 +46,7 @@ func NewRootCmd(client *master.MasterClient) *ChubaoFSCmd {
 		newUserCmd(client),
 		newMetaNodeCmd(client),
 		newDataNodeCmd(client),
+		newEcNodeCmd(client),
 		newDataPartitionCmd(client),
 		newEcPartitionCmd(client),
 		newConfigCmd(),

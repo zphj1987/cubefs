@@ -57,6 +57,7 @@ type EcDataPartitionCache struct {
 	partitions             map[uint64]*EcDataPartition
 	volName                string
 	vol                    *Vol
+	responseCache          []byte
 	readableAndWritableCnt int    // number of readable and writable partitionMap
 	sync.RWMutex
 }
@@ -99,6 +100,46 @@ func (ecdpCache *EcDataPartitionCache) getEcPartitionsView(minPartitionID uint64
 		epResps = append(epResps, epResp)
 	}
 	return
+}
+
+func (ecdpCache *EcDataPartitionCache) updateResponseCache(needsUpdate bool, minPartitionID uint64) (body []byte, err error) {
+	responseCache := ecdpCache.getEcPartitionResponseCache()
+	if responseCache == nil || needsUpdate || len(responseCache) == 0 {
+		epResps := ecdpCache.getEcPartitionsView(minPartitionID)
+		if len(epResps) == 0 {
+			log.LogError(fmt.Sprintf("action[updateEpResponseCache],volName[%v] minPartitionID:%v,err:%v",
+				ecdpCache.volName, minPartitionID, proto.ErrNoAvailEcPartition))
+			return nil, proto.ErrNoAvailEcPartition
+		}
+		cv := proto.NewEcPartitionsView()
+		cv.EcPartitions = epResps
+		reply := newSuccessHTTPReply(cv)
+		if body, err = json.Marshal(reply); err != nil {
+			log.LogError(fmt.Sprintf("action[updateEpResponseCache],minPartitionID:%v,err:%v",
+				minPartitionID, err.Error()))
+			return nil, proto.ErrMarshalData
+		}
+		ecdpCache.setEcPartitionResponseCache(body)
+		return
+	}
+	body = make([]byte, len(responseCache))
+	copy(body, responseCache)
+
+	return
+}
+
+func (ecdpCache *EcDataPartitionCache) getEcPartitionResponseCache() []byte {
+	ecdpCache.RLock()
+	defer ecdpCache.RUnlock()
+	return ecdpCache.responseCache
+}
+
+func (ecdpCache *EcDataPartitionCache) setEcPartitionResponseCache(responseCache []byte) {
+	ecdpCache.Lock()
+	defer ecdpCache.Unlock()
+	if responseCache != nil {
+		ecdpCache.responseCache = responseCache
+	}
 }
 
 func (ecdpCache *EcDataPartitionCache) setReadWriteDataPartitions(readWrites int, clusterName string) {
@@ -170,6 +211,17 @@ func (ecdp *EcDataPartition) getLeaderAddr() (leaderAddr string) {
 	return
 }
 
+func (ecdp *EcDataPartition) getLeaderAddrWithLock() (leaderAddr string) {
+	ecdp.RLock()
+	defer ecdp.RUnlock()
+	for _, replica := range ecdp.ecReplicas {
+		if replica.IsLeader {
+			return replica.Addr
+		}
+	}
+	return
+}
+
 func (ecdp *EcDataPartition) ecHostsToString() string {
 	return strings.Join(ecdp.Hosts, underlineSeparator)
 }
@@ -186,13 +238,19 @@ func (ecdp *EcDataPartition) getReplica(addr string) (replica *EcReplica, err er
 	return nil, errors.Trace(dataReplicaNotFound(addr), "%v not found", addr)
 }
 
-func (ecdp *EcDataPartition) addReplica(replica *EcReplica) {
-	for _, r := range ecdp.ecReplicas {
-		if replica.Addr == r.Addr {
-			return
-		}
+func (ecdp *EcDataPartition) update(action, volName string, newHosts []string, c *Cluster) (err error) {
+	orgHosts := make([]string, len(ecdp.Hosts))
+	copy(orgHosts, ecdp.Hosts)
+	ecdp.Hosts = newHosts
+	if err = c.syncUpdateEcDataPartition(ecdp); err != nil {
+		ecdp.Hosts = orgHosts
+		return errors.Trace(err, "action[%v] update partition[%v] vol[%v] failed", action, ecdp.PartitionID, volName)
 	}
-	ecdp.ecReplicas = append(ecdp.ecReplicas, replica)
+	msg := fmt.Sprintf("action[%v] success,vol[%v] partitionID:%v "+
+		"oldHosts:%v, newHosts:%v, newPeers[%v]",
+		action, volName, ecdp.PartitionID, orgHosts, ecdp.Hosts, ecdp.Peers)
+	log.LogInfo(msg)
+	return
 }
 
 func (ecdp *EcDataPartition) updateMetric(vr *proto.PartitionReport, ecNode *ECNode, c *Cluster) {
@@ -204,7 +262,7 @@ func (ecdp *EcDataPartition) updateMetric(vr *proto.PartitionReport, ecNode *ECN
 	replica, err := ecdp.getReplica(ecNode.Addr)
 	if err != nil {
 		replica = newEcReplica(ecNode)
-		ecdp.addReplica(replica)
+		ecdp.addEcReplica(replica)
 	}
 	ecdp.total = vr.Total
 	replica.Status = int8(vr.PartitionStatus)
@@ -214,6 +272,9 @@ func (ecdp *EcDataPartition) updateMetric(vr *proto.PartitionReport, ecNode *ECN
 	replica.FileCount = uint32(vr.ExtentCount)
 	replica.ReportTime = time.Now().Unix()
 	replica.IsLeader = vr.IsLeader
+	if vr.IsLeader {
+		ecdp.isRecover = vr.IsRecover
+	}
 	replica.NeedsToCompare = vr.NeedCompare
 	if replica.DiskPath != vr.DiskPath && vr.DiskPath != "" {
 		oldDiskPath := replica.DiskPath
@@ -254,6 +315,18 @@ func (ecdp *EcDataPartition) createTaskToCreateEcDataPartition(addr string, data
 
 	task = proto.NewAdminTask(proto.OpCreateEcDataPartition, addr, newCreateEcDataPartitionRequest(
 		ecdp.VolName, ecdp.PartitionID, int(dataPartitionSize), hosts))
+	ecdp.resetTaskID(task)
+	return
+}
+
+func (ecdp *EcDataPartition) createTaskToDeleteEcPartition(addr string) (task *proto.AdminTask) {
+	task = proto.NewAdminTask(proto.OpDeleteEcDataPartition, addr, newDeleteEcPartitionRequest(ecdp.PartitionID))
+	ecdp.resetTaskID(task)
+	return
+}
+
+func (ecdp *EcDataPartition) createTaskToChangeEcPartitionMembers(newHosts []string) (task *proto.AdminTask) {
+	task = proto.NewAdminTask(proto.OpChangeEcPartitionMembers, newHosts[0], newChangeEcPartitionMembersRequest(ecdp.PartitionID, newHosts))
 	ecdp.resetTaskID(task)
 	return
 }
@@ -320,7 +393,7 @@ func (ecdp *EcDataPartition) checkStatus(clusterName string, needLog bool, dpTim
 	ecdp.Lock()
 	defer ecdp.Unlock()
 	liveReplicas := ecdp.getLiveReplicasFromHosts(dpTimeOutSec)
-	if len(ecdp.Replicas) > len(ecdp.Hosts) {
+	if len(ecdp.ecReplicas) > len(ecdp.Hosts) {
 		ecdp.Status = proto.ReadOnly
 		msg := fmt.Sprintf("action[extractStatus],partitionID:%v has exceed repica, replicaNum:%v  liveReplicas:%v   Status:%v  RocksDBHost:%v ",
 			ecdp.PartitionID, ecdp.ReplicaNum, len(liveReplicas), ecdp.Status, ecdp.Hosts)
@@ -381,6 +454,40 @@ func (ecdp *EcDataPartition) checkMissingReplicas(clusterID, leaderAddr string, 
 	}
 }
 
+// Remove the replica address from the memory.
+func (ecdp *EcDataPartition) removeReplicaByAddr(addr string) {
+	delIndex := -1
+	var replica *EcReplica
+	for i := 0; i < len(ecdp.ecReplicas); i++ {
+		replica = ecdp.ecReplicas[i]
+		if replica.Addr == addr {
+			delIndex = i
+			break
+		}
+	}
+	msg := fmt.Sprintf("action[removeReplicaByAddr], ec partition:%v  on Node:%v  OffLine,the node is in replicas:%v", ecdp.PartitionID, addr, replica != nil)
+	log.LogDebug(msg)
+	if delIndex == -1 {
+		return
+	}
+	ecdp.FileInCoreMap = make(map[string]*FileInCore, 0)
+	ecdp.deleteReplicaByIndex(delIndex)
+	ecdp.modifyTime = time.Now().Unix()
+
+	return
+}
+func (ecdp *EcDataPartition) deleteReplicaByIndex(index int) {
+	var replicaAddrs []string
+	for _, replica := range ecdp.ecReplicas {
+		replicaAddrs = append(replicaAddrs, replica.Addr)
+	}
+	msg := fmt.Sprintf("deleteReplicaByIndex replica:%v  index:%v  locations :%v ", ecdp.PartitionID, index, replicaAddrs)
+	log.LogInfo(msg)
+	replicasAfter := ecdp.ecReplicas[index+1:]
+	ecdp.ecReplicas = ecdp.ecReplicas[:index]
+	ecdp.ecReplicas = append(ecdp.ecReplicas, replicasAfter...)
+}
+
 func (ecdp *EcDataPartition)  hasMissingEcPartition(addr string) (isMissing bool) {
 	_, ok := ecdp.hasReplica(addr)
 	if ok == false {
@@ -415,6 +522,62 @@ func (ecdp *EcDataPartition) getLiveReplicasFromHosts(timeOutSec int64) (replica
 	return
 }
 
+// Check if there is a replica missing or not.
+func (ecdp *EcDataPartition) hasMissingOneReplica(replicaNum int) (err error) {
+	hostNum := len(ecdp.ecReplicas)
+	if hostNum <= replicaNum-1 {
+		log.LogError(fmt.Sprintf("action[%v],partitionID:%v,err:%v",
+			"hasMissingOneReplica", ecdp.PartitionID, proto.ErrHasOneMissingReplica))
+		err = proto.ErrHasOneMissingReplica
+	}
+	return
+}
+
+func (ecdp *EcDataPartition) canBeOffLine(offlineAddr string) (err error) {
+	msg := fmt.Sprintf("action[canOffLine],partitionID:%v  RocksDBHost:%v  offLine:%v ",
+		ecdp.PartitionID, ecdp.Hosts, offlineAddr)
+	liveReplicas := ecdp.liveReplicas(defaultDataPartitionTimeOutSec)
+
+	otherLiveReplicas := make([]*EcReplica, 0)
+	for i := 0; i < len(liveReplicas); i++ {
+		replica := liveReplicas[i]
+		if replica.Addr != offlineAddr {
+			otherLiveReplicas = append(otherLiveReplicas, replica)
+		}
+	}
+
+	if len(otherLiveReplicas) < int(ecdp.DataUnitsNum) {
+		msg = fmt.Sprintf(msg+" err:%v  liveReplicas:%v, ecDataUnitsNum:%v", proto.ErrCannotBeOffLine, len(liveReplicas), ecdp.DataUnitsNum)
+		log.LogError(msg)
+		err = fmt.Errorf(msg)
+	}
+
+	return
+}
+func (ecdp *EcDataPartition) getLiveZones(offlineAddr string) (zones []string) {
+	ecdp.RLock()
+	defer ecdp.RUnlock()
+	for _, replica := range ecdp.ecReplicas {
+		if replica.ecNode == nil {
+			continue
+		}
+		if replica.ecNode.Addr == offlineAddr {
+			continue
+		}
+		zones = append(zones, replica.ecNode.ZoneName)
+	}
+	return
+}
+func (ecdp *EcDataPartition) liveReplicas(timeOutSec int64) (replicas []*EcReplica) {
+	replicas = make([]*EcReplica, 0)
+	for i := 0; i < len(ecdp.ecReplicas); i++ {
+		replica := ecdp.ecReplicas[i]
+		if replica.isLive(timeOutSec) == true && ecdp.hasHost(replica.Addr) == true {
+			replicas = append(replicas, replica)
+		}
+	}
+	return
+}
 func (ecdp *EcDataPartition) canWrite() bool {
 	avail := ecdp.total - ecdp.used
 	if int64(avail) > 10*util.GB {
@@ -429,7 +592,7 @@ func (c *Cluster) batchCreateEcDataPartition(vol *Vol, reqCount int) (err error)
 			return
 		}
 		if _, err = c.createEcDataPartition(vol); err != nil {
-			log.LogErrorf("action[batchCreateEcDataPartition] after create [%v] data partition,occurred error,err[%v]", i, err)
+			log.LogErrorf("action[batchCreateEcPartition] after create [%v] ec partition,occurred error,err[%v]", i, err)
 			break
 		}
 	}
@@ -547,6 +710,19 @@ func (c *Cluster) syncCreateEcDataPartitionToEcNode(host string, size uint64, ec
 		return
 	}
 	return string(resp.Data), nil
+}
+
+func (c *Cluster) syncChangeEcPartitionMembers(ecdp *EcDataPartition) (resp *proto.Packet, err error) {
+	hosts := ecdp.Hosts
+	task := ecdp.createTaskToChangeEcPartitionMembers(hosts)
+	ecNode, err := c.ecNode(hosts[0])
+	if err != nil {
+		return
+	}
+	if resp, err = ecNode.TaskManager.syncSendAdminTask(task); err != nil {
+		return
+	}
+	return resp, nil
 }
 
 // key=#dp#volID#partitionID,value=json.Marshal(dataPartitionValue)

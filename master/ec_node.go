@@ -361,13 +361,19 @@ func (c *Cluster) ecNode(addr string) (ecNode *ECNode, err error) {
 	return
 }
 
+func (c *Cluster) delEcNodeFromCache(ecNode *ECNode) {
+	c.ecNodes.Delete(ecNode.Addr)
+	c.t.deleteEcNode(ecNode)
+	go ecNode.clean()
+}
+
 func (c *Cluster) decommissionEcNode(ecNode *ECNode) (err error) {
 	msg := fmt.Sprintf("action[decommissionEcNode], Node[%v] OffLine", ecNode.Addr)
 	log.LogWarn(msg)
 	safeVols := c.allVols()
 	for _, vol := range safeVols {
-		for _, dp := range vol.dataPartitions.partitions {
-			if err = c.decommissionEcDataPartition(ecNode.Addr, dp); err != nil {
+		for _, ecdp := range vol.ecDataPartitions.partitions {
+			if err = c.decommissionEcDataPartition(ecNode.Addr, ecdp, ""); err != nil {
 				return
 			}
 		}
@@ -378,7 +384,7 @@ func (c *Cluster) decommissionEcNode(ecNode *ECNode) (err error) {
 		Warn(c.Name, msg)
 		return
 	}
-	c.ecNodes.Delete(ecNode.Addr)
+	c.delEcNodeFromCache(ecNode)
 	go ecNode.clean()
 	msg = fmt.Sprintf("action[decommissionEcNode],clusterID[%v] node[%v] offLine success",
 		c.Name, ecNode.Addr)
@@ -386,7 +392,126 @@ func (c *Cluster) decommissionEcNode(ecNode *ECNode) (err error) {
 	return
 }
 
-func (c *Cluster) decommissionEcDataPartition(offlineAddr string, dp *DataPartition) (err error) {
+
+// Decommission a ec partition.
+// 1. Check if we can decommission a ec partition. In the following cases, we are not allowed to do so:
+// - (a) a replica is not in the latest host list;
+// - (b) there is already a replica been taken offline;
+// - (c) the remaining number of replicas < M (M + K = replicaNum)
+// 2. Choose a new ec node.
+// 3. synchronized decommission ec partition
+// 4. synchronized create a new ec partition
+// 5. Set the ec partition as readOnly.
+// 6. persistent the new host list
+func (c *Cluster) decommissionEcDataPartition(offlineAddr string, ecdp *EcDataPartition, errMsg string) (err error) {
+	var (
+		targetHosts     []string
+		newAddr         string
+		msg             string
+		ecNode          *ECNode
+		zone            *Zone
+		newHosts        []string
+		replica         *EcReplica
+		zones           []string
+		excludeZone     string
+	)
+	ecdp.RLock()
+	if ok  := ecdp.hasHost(offlineAddr); !ok {
+		ecdp.RUnlock()
+		return
+	}
+	replica, _ = ecdp.getReplica(offlineAddr)
+	ecdp.RUnlock()
+	if err = c.validateDecommissionEcDataPartition(ecdp, offlineAddr); err != nil {
+		goto errHandler
+	}
+
+	if ecNode, err = c.ecNode(offlineAddr); err != nil {
+		goto errHandler
+	}
+
+	if ecNode.ZoneName == "" {
+		err = fmt.Errorf("ecNode[%v] zone is nil", ecNode.Addr)
+		goto errHandler
+	}
+	if zone, err = c.t.getZone(ecNode.ZoneName); err != nil {
+		goto errHandler
+	}
+
+	if targetHosts, _, err = zone.getAvailEcNodeHosts(ecdp.Hosts, 1); err != nil {
+		// select ec nodes from the other zone
+		zones = ecdp.getLiveZones(offlineAddr)
+		if len(zones) == 0 {
+			excludeZone = zone.name
+		} else {
+			excludeZone = zones[0]
+		}
+		if targetHosts, err = c.chooseTargetEcNodes(excludeZone, ecdp.Hosts, 1); err != nil {
+			goto errHandler
+		}
+	}
+	log.LogInfof("action[decommissionEcDataPartition] target Hosts:%v", targetHosts)
+	if err = c.removeEcDataReplica(ecdp, offlineAddr, false); err != nil {
+		goto errHandler
+	}
+	newAddr = targetHosts[0]
+	newHosts = ecdp.Hosts
+	for index, host := range newHosts {
+		if host == offlineAddr {
+			newHosts[index] = newAddr
+		}
+	}
+	if err := c.addEcReplica(ecdp, newAddr, newHosts); err != nil {
+		goto errHandler
+	}
+	ecdp.Lock()
+	ecdp.Hosts = newHosts
+	if err = ecdp.update("decommissionEcDataPartition", ecdp.VolName, ecdp.Hosts, c); err != nil {
+		ecdp.Unlock()
+		return
+	}
+	ecdp.Unlock()
+	if _, err := c.syncChangeEcPartitionMembers(ecdp); err != nil {
+		goto errHandler
+	}
+	ecdp.Status = proto.ReadOnly
+	ecdp.isRecover = true
+	c.putBadEcPartitionIDs(replica, offlineAddr, ecdp.PartitionID)
+	log.LogWarnf("clusterID[%v] partitionID:%v  on Node:%v offline success,newHost[%v],PersistenceHosts:[%v]",
+		c.Name, ecdp.PartitionID, offlineAddr, newAddr, ecdp.Hosts)
+	return
+errHandler:
+	msg = fmt.Sprintf(errMsg+" clusterID[%v] partitionID:%v  on Node:%v  "+
+		"Then Fix It on newHost:%v   Err:%v , PersistenceHosts:%v  ",
+		c.Name, ecdp.PartitionID, offlineAddr, newAddr, err, ecdp.Hosts)
+	if err != nil {
+		Warn(c.Name, msg)
+		err = fmt.Errorf("vol[%v],partition[%v],err[%v]", ecdp.VolName, ecdp.PartitionID, err)
+	}
+	return
+}
+
+func (c *Cluster) validateDecommissionEcDataPartition(ecdp *EcDataPartition, offlineAddr string) (err error) {
+	ecdp.RLock()
+	defer ecdp.RUnlock()
+	var vol *Vol
+	if vol, err = c.getVol(ecdp.VolName); err != nil {
+		return
+	}
+
+	if err = ecdp.hasMissingOneReplica(int(vol.dpReplicaNum)); err != nil {
+		return
+	}
+
+	// if the partition can be offline or not
+	if err = ecdp.canBeOffLine(offlineAddr); err != nil {
+		return
+	}
+
+	if ecdp.isRecover {
+		err = fmt.Errorf("vol[%v],ec partition[%v] is recovering,[%v] can't be decommissioned", vol.Name, ecdp.PartitionID, offlineAddr)
+		return
+	}
 	return
 }
 
@@ -422,4 +547,119 @@ func (c *Cluster) allEcNodes() (ecNodes []proto.NodeView) {
 		return true
 	})
 	return
+}
+
+// remove ec replica on ec node
+func (c *Cluster) removeEcDataReplica(ecdp *EcDataPartition, addr string, validate bool) (err error) {
+	defer func() {
+		if err != nil {
+			log.LogErrorf("action[removeEcDataReplica],vol[%v],ec partition[%v],err[%v]", ecdp.VolName, ecdp.PartitionID, err)
+		}
+	}()
+	if validate == true {
+		if err = c.validateDecommissionEcDataPartition(ecdp, addr); err != nil {
+			return
+		}
+	}
+	ok := c.isEcRecovering(ecdp, addr)
+	if ok {
+		err = fmt.Errorf("vol[%v],ec partition[%v] can't decommision until it has recovered", ecdp.VolName, ecdp.PartitionID)
+		return
+	}
+	ecNode, err := c.ecNode(addr)
+	if err != nil {
+		return
+	}
+	//todo delete peer?
+	if err = c.doDeleteEcReplica(ecdp, ecNode); err != nil {
+		return
+	}
+	//todo try to tell leader to fix data after change members?
+	return
+}
+
+func (c *Cluster) addEcReplica(ecdp *EcDataPartition, addr string, hosts []string) (err error) {
+	defer func() {
+		if err != nil {
+			log.LogErrorf("action[addEcReplica],vol[%v], ec partition[%v],err[%v]", ecdp.VolName, ecdp.PartitionID, err)
+		}
+	}()
+	ecNode, err := c.ecNode(addr)
+	if err != nil {
+		return
+	}
+	if err = c.doCreateEcReplica(ecdp, ecNode, hosts); err != nil {
+		return
+	}
+	return
+}
+
+func (c *Cluster) isEcRecovering(ecdp *EcDataPartition, addr string) (isRecover bool) {
+	var key string
+	ecdp.RLock()
+	defer ecdp.RUnlock()
+	replica, _ := ecdp.getReplica(addr)
+	if replica != nil {
+		key = fmt.Sprintf("%s:%s", addr, replica.DiskPath)
+	} else {
+		key = fmt.Sprintf("%s:%s", addr, "")
+	}
+	var badPartitionIDs []uint64
+	badPartitions, ok := c.BadEcPartitionIds.Load(key)
+	if ok {
+		badPartitionIDs = badPartitions.([]uint64)
+	}
+	for _, id := range badPartitionIDs {
+		if id == ecdp.PartitionID {
+			isRecover = true
+		}
+	}
+	return
+}
+
+func (c *Cluster) doDeleteEcReplica(ecdp *EcDataPartition, ecNode *ECNode) (err error) {
+	ecdp.Lock()
+	// in case ecNode is unreachable, remove replica first.
+	ecdp.removeReplicaByAddr(ecNode.Addr)
+	ecdp.checkAndRemoveMissReplica(ecNode.Addr)
+	ecdp.Unlock()
+	task := ecdp.createTaskToDeleteEcPartition(ecNode.Addr)
+	_, err = ecNode.TaskManager.syncSendAdminTask(task)
+	if err != nil {
+		log.LogErrorf("action[deleteRemoteEcReplica] vol[%v], ec partition[%v], err[%v]", ecdp.VolName, ecdp.PartitionID, err)
+	}
+	return nil
+}
+
+func (c *Cluster) doCreateEcReplica(ecdp *EcDataPartition, addNode *ECNode, hosts []string) (err error) {
+	vol, err := c.getVol(ecdp.VolName)
+	if err != nil {
+		return
+	}
+	diskPath, err := c.syncCreateEcDataPartitionToEcNode(addNode.Addr, vol.dataPartitionSize, ecdp, hosts)
+	if err != nil {
+		return
+	}
+	ecdp.Lock()
+	defer ecdp.Unlock()
+	if err = ecdp.afterCreation(addNode.Addr, diskPath, c); err != nil {
+		return
+	}
+	return
+}
+
+func (c *Cluster) putBadEcPartitionIDs(replica *EcReplica, addr string, partitionID uint64) {
+	var key string
+	newBadPartitionIDs := make([]uint64, 0)
+	if replica != nil {
+		key = fmt.Sprintf("%s:%s", addr, replica.DiskPath)
+	} else {
+		key = fmt.Sprintf("%s:%s", addr, "")
+	}
+	badPartitionIDs, ok := c.BadEcPartitionIds.Load(key)
+	if ok {
+		newBadPartitionIDs = badPartitionIDs.([]uint64)
+	}
+	newBadPartitionIDs = append(newBadPartitionIDs, partitionID)
+	c.BadEcPartitionIds.Store(key, newBadPartitionIDs)
 }

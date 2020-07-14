@@ -92,6 +92,10 @@ const (
 	cmdVolDefaultDPSize         = 120
 	cmdVolDefaultCapacity       = 10 // 100GB
 	cmdVolDefaultReplicas       = 3
+	cmdVolDefaultEcDataNum      = 4
+	cmdVolDefaultEcParityNum    = 2
+	cmdVolDefaultVolType        = 0
+	cmdVolDefaultCrossZone      = false
 	cmdVolDefaultFollowerReader = true
 )
 
@@ -99,7 +103,12 @@ func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
 	var optMPCount int
 	var optDPSize uint64
 	var optCapacity uint64
-	var optReplicas int
+	var optReplicas uint8
+	var optDataNum  uint8
+	var optParityNum uint8
+	var optCrossZone bool
+	var optZoneName string
+	var optVolType uint8
 	var optFollowerRead bool
 	var optYes bool
 	var cmd = &cobra.Command{
@@ -120,6 +129,8 @@ func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
 				stdout("  Meta partition count: %v\n", optMPCount)
 				stdout("  Capacity            : %v GB\n", optCapacity)
 				stdout("  Replicas            : %v\n", optReplicas)
+				stdout("  Ec data units num   : %v\n", optDataNum)
+				stdout("  Ec parity units num : %v\n", optParityNum)
 				stdout("  Allow follower read : %v\n", formatEnabledDisabled(optFollowerRead))
 				stdout("\nConfirm (yes/no)[yes]: ")
 				var userConfirm string
@@ -129,10 +140,21 @@ func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
 					return
 				}
 			}
-
-			err = client.AdminAPI().CreateVolume(
-				volumeName, userID, optMPCount, optDPSize,
-				optCapacity, optReplicas, optFollowerRead)
+			volPara := &proto.CreateVolPara{
+				Name: volumeName,
+				Owner: userID,
+				MpCount: optMPCount,
+				DpSize: optDPSize,
+				Capacity: int(optCapacity),
+				ReplicaNum: optReplicas,
+				FollowerRead: optFollowerRead,
+				ZoneName: optZoneName,
+				CrossZone: optCrossZone,
+				EcDataBlockNum: optDataNum,
+				EcParityBlockNum: optParityNum,
+				VolType: optVolType,
+			}
+			err = client.AdminAPI().CreateVolume(volPara)
 			if err != nil {
 				errout("Create volume failed case:\n%v\n", err)
 				os.Exit(1)
@@ -144,7 +166,12 @@ func newVolCreateCmd(client *master.MasterClient) *cobra.Command {
 	cmd.Flags().IntVar(&optMPCount, CliFlagMetaPartitionCount, cmdVolDefaultMPCount, "Specify init meta partition count")
 	cmd.Flags().Uint64Var(&optDPSize, CliFlagDataPartitionSize, cmdVolDefaultDPSize, "Specify size of data partition size [Unit: GB]")
 	cmd.Flags().Uint64Var(&optCapacity, CliFlagCapacity, cmdVolDefaultCapacity, "Specify volume capacity [Unit: GB]")
-	cmd.Flags().IntVar(&optReplicas, CliFlagReplicas, cmdVolDefaultReplicas, "Specify volume replicas number")
+	cmd.Flags().Uint8Var(&optReplicas, CliFlagReplicas, cmdVolDefaultReplicas, "Specify volume replicas number")
+	cmd.Flags().Uint8Var(&optDataNum, CliFlagEcDataNum, cmdVolDefaultEcDataNum, "Specify ec data units number")
+	cmd.Flags().Uint8Var(&optParityNum, CliFlagEcParityNum, cmdVolDefaultEcParityNum, "Specify ec parity units number")
+	cmd.Flags().Uint8Var(&optVolType, CliFlagVolType, cmdVolDefaultVolType, "Specify volume type, 0 for overwriteVol, 1 for appendOnlyVol")
+	cmd.Flags().StringVar(&optZoneName, CliFlagZoneName, "", "Specify zone name if not cross zone")
+	cmd.Flags().BoolVar(&optCrossZone, CliFlagCrossZone, cmdVolDefaultCrossZone, "Specify if cross zone")
 	cmd.Flags().BoolVar(&optFollowerRead, CliFlagEnableFollowerRead, cmdVolDefaultFollowerReader, "Enable read form replica follower")
 	cmd.Flags().BoolVarP(&optYes, "yes", "y", false, "Answer yes for all questions")
 	return cmd
@@ -159,6 +186,7 @@ func newVolInfoCmd(client *master.MasterClient) *cobra.Command {
 	var (
 		optMetaDetail bool
 		optDataDetail bool
+		optEcDetail   bool
 	)
 
 	var cmd = &cobra.Command{
@@ -210,6 +238,23 @@ func newVolInfoCmd(client *master.MasterClient) *cobra.Command {
 					stdout("%v\n", formatDataPartitionTableRow(dp))
 				}
 			}
+
+			// print ec detail
+			if optEcDetail {
+				var view *proto.EcPartitionsView
+				if view, err = client.ClientAPI().GetEcPartitions(volumeName); err != nil {
+					errout("Get volume ec detail information failed:\n%v\n", err)
+					os.Exit(1)
+				}
+				stdout("Ec partitions:\n")
+				stdout("%v\n", ecPartitionTableHeader)
+				sort.SliceStable(view.EcPartitions, func(i, j int) bool {
+					return view.EcPartitions[i].PartitionID < view.EcPartitions[j].PartitionID
+				})
+				for _, ep := range view.EcPartitions {
+					stdout("%v\n", formatEcPartitionTableRow(ep))
+				}
+			}
 			return
 		},
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -219,6 +264,7 @@ func newVolInfoCmd(client *master.MasterClient) *cobra.Command {
 			return validVols(client, toComplete), cobra.ShellCompDirectiveNoFileComp
 		},
 	}
+	cmd.Flags().BoolVarP(&optEcDetail, "ec-partition", "e", false, "Display ec partition detail information")
 	cmd.Flags().BoolVarP(&optMetaDetail, "meta-partition", "m", false, "Display meta partition detail information")
 	cmd.Flags().BoolVarP(&optDataDetail, "data-partition", "d", false, "Display data partition detail information")
 	return cmd

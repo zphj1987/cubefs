@@ -206,6 +206,7 @@ func (m *Server) getCluster(w http.ResponseWriter, r *http.Request) {
 		EcNodes:             make([]proto.NodeView, 0),
 		CodecNodes:          make([]proto.NodeView, 0),
 		VolStatInfo:         make([]*proto.VolStatInfo, 0),
+		BadEcPartitionIDs:   make([]proto.BadPartitionView, 0),
 		BadPartitionIDs:     make([]proto.BadPartitionView, 0),
 		BadMetaPartitionIDs: make([]proto.BadPartitionView, 0),
 	}
@@ -230,6 +231,13 @@ func (m *Server) getCluster(w http.ResponseWriter, r *http.Request) {
 		path := key.(string)
 		bpv := badPartitionView{Path: path, PartitionIDs: badDataPartitionIds}
 		cv.BadPartitionIDs = append(cv.BadPartitionIDs, bpv)
+		return true
+	})
+	m.cluster.BadEcPartitionIds.Range(func(key, value interface{}) bool {
+		badEcPartitionIds := value.([]uint64)
+		path := key.(string)
+		bpv := badPartitionView{Path: path, PartitionIDs: badEcPartitionIds}
+		cv.BadEcPartitionIDs = append(cv.BadEcPartitionIDs, bpv)
 		return true
 	})
 	m.cluster.BadMetaPartitionIds.Range(func(key, value interface{}) bool {
@@ -561,37 +569,20 @@ func (m *Server) updateVol(w http.ResponseWriter, r *http.Request) {
 	sendOkReply(w, r, newSuccessHTTPReply(msg))
 }
 
-type CreateVolPara struct {
-	name             string
-	owner            string
-	dpSize           uint64
-	mpCount          int
-	capacity         int
-	followerRead     bool
-	authenticate     bool
-	volType          uint8
-	ecDataBlockNum   uint8
-	ecParityBlockNum uint8
-	replicaNum       uint8
-	crossZone        bool
-	zoneName         string
-	enableToken      bool
-}
-
 func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 	var (
 		err     error
 		msg     string
 		vol     *Vol
-		volPara *CreateVolPara
+		volPara *proto.CreateVolPara
 	)
 
 	if volPara, err = parseRequestToCreateVol(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
-	if !(volPara.replicaNum == 2 || volPara.replicaNum == 3) {
-		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", volPara.replicaNum)
+	if !(volPara.ReplicaNum == 2 || volPara.ReplicaNum == 3) {
+		err = fmt.Errorf("replicaNum can only be 2 and 3,received replicaNum is[%v]", volPara.ReplicaNum)
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
@@ -600,11 +591,11 @@ func (m *Server) createVol(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = m.associateVolWithUser(volPara.owner, volPara.name); err != nil {
+	if err = m.associateVolWithUser(volPara.Owner, volPara.Name); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
-	msg = fmt.Sprintf("create vol[%v] successfully, has allocate [%v] data partitions", volPara.name, len(vol.dataPartitions.partitions))
+	msg = fmt.Sprintf("create vol[%v] successfully, has allocate [%v] data partitions", volPara.Name, len(vol.dataPartitions.partitions))
 	sendOkReply(w, r, newSuccessHTTPReply(msg))
 }
 
@@ -1186,21 +1177,21 @@ func parseBoolFieldToUpdateVol(r *http.Request, vol *Vol) (followerRead, authent
 	return
 }
 
-func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error) {
+func parseRequestToCreateVol(r *http.Request) (volPara *proto.CreateVolPara, err error) {
 	if err = r.ParseForm(); err != nil {
 		return
 	}
-	volPara = &CreateVolPara{}
-	if volPara.name, err = extractName(r); err != nil {
+	volPara = &proto.CreateVolPara{}
+	if volPara.Name, err = extractName(r); err != nil {
 		return
 	}
-	if volPara.owner, err = extractOwner(r); err != nil {
+	if volPara.Owner, err = extractOwner(r); err != nil {
 		return
 	}
 
 	if mpCountStr := r.FormValue(metaPartitionCountKey); mpCountStr != "" {
-		if volPara.mpCount, err = strconv.Atoi(mpCountStr); err != nil {
-			volPara.mpCount = defaultInitMetaPartitionCount
+		if volPara.MpCount, err = strconv.Atoi(mpCountStr); err != nil {
+			volPara.MpCount = defaultInitMetaPartitionCount
 		}
 	}
 
@@ -1211,10 +1202,10 @@ func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error
 		err = unmatchedKey(replicaNumKey)
 		return
 	}
-	volPara.replicaNum = uint8(dpReplicanNum)
+	volPara.ReplicaNum = uint8(dpReplicanNum)
 
 	if sizeStr := r.FormValue(dataPartitionSizeKey); sizeStr != "" {
-		if volPara.dpSize, err = strconv.ParseUint(sizeStr, 10, 64); err != nil {
+		if volPara.DpSize, err = strconv.ParseUint(sizeStr, 10, 64); err != nil {
 			err = unmatchedKey(dataPartitionSizeKey)
 			return
 		}
@@ -1223,20 +1214,20 @@ func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error
 	if capacityStr := r.FormValue(volCapacityKey); capacityStr == "" {
 		err = keyNotFound(volCapacityKey)
 		return
-	} else if volPara.capacity, err = strconv.Atoi(capacityStr); err != nil {
+	} else if volPara.Capacity, err = strconv.Atoi(capacityStr); err != nil {
 		err = unmatchedKey(volCapacityKey)
 		return
 	}
 
-	if volPara.followerRead, err = extractFollowerRead(r); err != nil {
+	if volPara.FollowerRead, err = extractFollowerRead(r); err != nil {
 		return
 	}
 
-	if volPara.authenticate, err = extractAuthenticate(r); err != nil {
+	if volPara.Authenticate, err = extractAuthenticate(r); err != nil {
 		return
 	}
 
-	if volPara.crossZone, err = extractCrossZone(r); err != nil {
+	if volPara.CrossZone, err = extractCrossZone(r); err != nil {
 		return
 	}
 
@@ -1246,9 +1237,9 @@ func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error
 		if err != nil {
 			return
 		}
-		volPara.volType = uint8(iVolType)
-		if !(volPara.volType == overwriteVol || volPara.volType == appendOnlyVol) {
-			err = fmt.Errorf("invalid vol type %v,vol type must be 0(append) or 1(overwrite)", volPara.volType)
+		volPara.VolType = uint8(iVolType)
+		if !(volPara.VolType == overwriteVol || volPara.VolType == appendOnlyVol) {
+			err = fmt.Errorf("invalid vol type %v,vol type must be 0(append) or 1(overwrite)", volPara.VolType)
 			return
 		}
 	}
@@ -1259,9 +1250,9 @@ func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error
 		if err != nil {
 			return
 		}
-		volPara.ecDataBlockNum = uint8(iEcDataBlockNum)
+		volPara.EcDataBlockNum = uint8(iEcDataBlockNum)
 	} else {
-		volPara.ecDataBlockNum = defaultEcDataBlockNum
+		volPara.EcDataBlockNum = defaultEcDataBlockNum
 	}
 
 	var iEcParityBlockNum int
@@ -1270,13 +1261,13 @@ func parseRequestToCreateVol(r *http.Request) (volPara *CreateVolPara, err error
 		if err != nil {
 			return
 		}
-		volPara.ecDataBlockNum = uint8(iEcParityBlockNum)
+		volPara.EcParityBlockNum = uint8(iEcParityBlockNum)
 	} else {
-		volPara.ecParityBlockNum = defaultEcParityBlockNum
+		volPara.EcParityBlockNum = defaultEcParityBlockNum
 	}
 
-	volPara.zoneName = r.FormValue(zoneNameKey)
-	volPara.enableToken = extractEnableToken(r)
+	volPara.ZoneName = r.FormValue(zoneNameKey)
+	volPara.EnableToken = extractEnableToken(r)
 	return
 }
 
@@ -1658,6 +1649,30 @@ func (m *Server) getDataPartitions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body, err = vol.getDataPartitionsView(); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(err))
+		return
+	}
+	send(w, r, body)
+}
+
+// Obtain all the ec partitions in a volume.
+func (m *Server) getEcPartitions(w http.ResponseWriter, r *http.Request) {
+	var (
+		body []byte
+		name string
+		vol  *Vol
+		err  error
+	)
+	if name, err = parseAndExtractName(r); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if vol, err = m.cluster.getVol(name); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(proto.ErrVolNotExists))
+		return
+	}
+
+	if body, err = vol.getEcPartitionsView(); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -2052,11 +2067,12 @@ func (m *Server) createEcDataPartition(w http.ResponseWriter, r *http.Request) {
 	var (
 		rstMsg  string
 		volName string
+		count   int
 		vol     *Vol
 		err     error
 	)
 
-	if volName, err = parseRequestToCreateEcDataPartition(r); err != nil {
+	if volName, count, err = parseRequestToCreateEcDataPartition(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
@@ -2065,19 +2081,65 @@ func (m *Server) createEcDataPartition(w http.ResponseWriter, r *http.Request) {
 		sendErrReply(w, r, newErrHTTPReply(proto.ErrVolNotExists))
 		return
 	}
-	if _, err = m.cluster.createEcDataPartition(vol); err != nil {
+	if err = m.cluster.batchCreateEcDataPartition(vol, count); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
-	rstMsg = fmt.Sprintf(" createEcDataPartition succeeeds. ")
+	rstMsg = fmt.Sprintf("createEcPartition succeeds. ")
 	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
 }
 
-func parseRequestToCreateEcDataPartition(r *http.Request) (name string, err error) {
+func (m *Server) decommissionEcPartition(w http.ResponseWriter, r *http.Request) {
+	var (
+		rstMsg       string
+		partitionID  uint64
+		addr         string
+		ep           *EcDataPartition
+		err          error
+	)
+
+	if partitionID, addr, err = parseRequestToDecommissionEcPartition(r); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
+		return
+	}
+	if ep, err = m.cluster.getEcPartitionByID(partitionID); err != nil {
+		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeEcPartitionNotExists, Msg: err.Error()})
+	}
+	if err = m.cluster.decommissionEcDataPartition(addr , ep, ""); err != nil {
+		sendErrReply(w, r, newErrHTTPReply(err))
+	}
+	rstMsg = fmt.Sprintf("createEcPartition succeeds. ")
+	sendOkReply(w, r, newSuccessHTTPReply(rstMsg))
+}
+
+func parseRequestToCreateEcDataPartition(r *http.Request) (name string, count int, err error) {
 	if err = r.ParseForm(); err != nil {
 		return
 	}
+	if countStr := r.FormValue(countKey); countStr == "" {
+		err = keyNotFound(countKey)
+		return
+	} else if count, err = strconv.Atoi(countStr); err != nil || count == 0 {
+		err = unmatchedKey(countKey)
+		return
+	}
 	if name, err = extractName(r); err != nil {
+		return
+	}
+	return
+}
+
+func parseRequestToDecommissionEcPartition(r *http.Request) (partitionID uint64, nodeAddr string, err error) {
+	return extractEcPartitionIDAndAddr(r)
+}
+func extractEcPartitionIDAndAddr(r *http.Request) (ID uint64, addr string, err error) {
+	if err = r.ParseForm(); err != nil {
+		return
+	}
+	if ID, err = extractPartitionID(r); err != nil {
+		return
+	}
+	if addr, err = extractNodeAddr(r); err != nil {
 		return
 	}
 	return

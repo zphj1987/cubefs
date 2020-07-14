@@ -301,8 +301,14 @@ func (m *Server) registerAPIRoutes(router *mux.Router) {
 		Path(proto.CreateEcDataPartition).
 		HandlerFunc(m.createEcDataPartition)
 	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.AdminDecommissionEcPartition).
+		HandlerFunc(m.decommissionEcPartition)
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
 		Path(proto.AdminGetEcPartition).
 		HandlerFunc(m.getEcPartition)
+	router.NewRoute().Methods(http.MethodGet, http.MethodPost).
+		Path(proto.ClientEcPartitions).
+		HandlerFunc(m.getEcPartitions)
 }
 
 func (m *Server) newReverseProxy() *httputil.ReverseProxy {

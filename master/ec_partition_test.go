@@ -21,11 +21,12 @@ func TestEcPartition(t *testing.T) {
 	}
 	partition := commonVol.ecDataPartitions.partitions[0]
 	getEcPartition(partition.PartitionID, t)
+	decommissionEcPartition(partition, t)
 }
 
 func createEcPartition(vol *Vol, t *testing.T) {
 	oldCount := len(vol.dataPartitions.partitions)
-	reqURL := fmt.Sprintf("%v%v?name=%v",
+	reqURL := fmt.Sprintf("%v%v?name=%v&count=1",
 		hostAddr, proto.CreateEcDataPartition, vol.Name)
 	fmt.Println(reqURL)
 	process(reqURL, t)

@@ -816,3 +816,7 @@ func (vol *Vol) doCreateMetaPartition(c *Cluster, start, end uint64) (mp *MetaPa
 func (vol *Vol) getEcPartitionByID(partitionID uint64) (ep *EcDataPartition, err error) {
 	return vol.ecDataPartitions.get(partitionID)
 }
+
+func (vol *Vol) getEcPartitionsView() (body []byte, err error) {
+	return vol.ecDataPartitions.updateResponseCache(false, 0)
+}

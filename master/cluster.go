@@ -54,6 +54,7 @@ type Cluster struct {
 	zoneStatInfos             map[string]*proto.ZoneStat
 	volStatInfo               sync.Map
 	BadDataPartitionIds       *sync.Map
+	BadEcPartitionIds         *sync.Map
 	BadMetaPartitionIds       *sync.Map
 	DisableAutoAllocate       bool
 	fsm                       *MetadataFsm
@@ -71,6 +72,7 @@ func newCluster(name string, leaderInfo *LeaderInfo, fsm *MetadataFsm, partition
 	c.cfg = cfg
 	c.t = newTopology()
 	c.BadDataPartitionIds = new(sync.Map)
+	c.BadEcPartitionIds = new(sync.Map)
 	c.BadMetaPartitionIds = new(sync.Map)
 	c.dataNodeStatInfo = new(nodeStatInfo)
 	c.metaNodeStatInfo = new(nodeStatInfo)
@@ -1298,44 +1300,44 @@ errHandler:
 
 // Create a new volume.
 // By default we create 3 meta partitions and 10 data partitions and 1 ec partition during initialization.
-func (c *Cluster) createVol(volPara *CreateVolPara) (vol *Vol, err error) {
+func (c *Cluster) createVol(volPara *proto.CreateVolPara) (vol *Vol, err error) {
 	var (
 		readWriteDataPartitions int
 		readWriteEcPartitions   int
 	)
 
-	if volPara.dpSize == 0 {
-		volPara.dpSize = util.DefaultDataPartitionSize
+	if volPara.DpSize == 0 {
+		volPara.DpSize = util.DefaultDataPartitionSize
 	} else {
-		volPara.dpSize = uint64(volPara.dpSize) * util.GB
+		volPara.DpSize = uint64(volPara.DpSize) * util.GB
 	}
 
-	if volPara.crossZone && c.t.zoneLen() <= 1 {
+	if volPara.CrossZone && c.t.zoneLen() <= 1 {
 		return nil, fmt.Errorf("cluster has one zone,can't cross zone")
 	}
-	if volPara.crossZone && volPara.zoneName != "" {
+	if volPara.CrossZone && volPara.ZoneName != "" {
 		return nil, fmt.Errorf("only the vol which don't across zones,can specified zoneName")
 	}
-	if volPara.zoneName != "" {
-		if _, err = c.t.getZone(volPara.zoneName); err != nil {
+	if volPara.ZoneName != "" {
+		if _, err = c.t.getZone(volPara.ZoneName); err != nil {
 			return
 		}
-	} else if !volPara.crossZone {
-		volPara.zoneName = DefaultZoneName
+	} else if !volPara.CrossZone {
+		volPara.ZoneName = DefaultZoneName
 	}
-	if volPara.replicaNum == 0 {
-		volPara.replicaNum = defaultReplicaNum
+	if volPara.ReplicaNum == 0 {
+		volPara.ReplicaNum = defaultReplicaNum
 	}
 	if vol, err = c.doCreateVol(volPara); err != nil {
 		goto errHandler
 	}
 
-	if err = vol.initMetaPartitions(c, volPara.mpCount); err != nil {
+	if err = vol.initMetaPartitions(c, volPara.MpCount); err != nil {
 		vol.Status = markDelete
 		if e := vol.deleteVolFromStore(c); e != nil {
 			log.LogErrorf("action[createVol] failed,vol[%v] err[%v]", vol.Name, e)
 		}
-		c.deleteVol(volPara.name)
+		c.deleteVol(volPara.Name)
 		err = fmt.Errorf("action[createVol] initMetaPartitions failed,err[%v]", err)
 		goto errHandler
 	}
@@ -1357,22 +1359,22 @@ func (c *Cluster) createVol(volPara *CreateVolPara) (vol *Vol, err error) {
 	vol.dataPartitions.readableAndWritableCnt = readWriteDataPartitions
 	vol.ecDataPartitions.readableAndWritableCnt = readWriteEcPartitions
 	vol.updateViewCache(c)
-	log.LogInfof("action[createVol] vol[%v], readableAndWritableDpCnt[%v], readableAndWritableEcCnt[%v]", volPara.name, readWriteDataPartitions, readWriteEcPartitions)
+	log.LogInfof("action[createVol] vol[%v], readableAndWritableDpCnt[%v], readableAndWritableEcCnt[%v]", volPara.Name, readWriteDataPartitions, readWriteEcPartitions)
 	return
 
 errHandler:
-	err = fmt.Errorf("action[createVol], clusterID[%v] name:%v, err:%v ", c.Name, volPara.name, err)
+	err = fmt.Errorf("action[createVol], clusterID[%v] name:%v, err:%v ", c.Name, volPara.Name, err)
 	log.LogError(errors.Stack(err))
 	Warn(c.Name, err.Error())
 	return
 }
 
-func (c *Cluster) doCreateVol(volPara *CreateVolPara) (vol *Vol, err error) {
+func (c *Cluster) doCreateVol(volPara *proto.CreateVolPara) (vol *Vol, err error) {
 	var id uint64
 	c.createVolMutex.Lock()
 	defer c.createVolMutex.Unlock()
 	var createTime = time.Now().Unix() // record unix seconds of volume create time
-	if _, err = c.getVol(volPara.name); err == nil {
+	if _, err = c.getVol(volPara.Name); err == nil {
 		err = proto.ErrDuplicateVol
 		goto errHandler
 	}
@@ -1380,14 +1382,14 @@ func (c *Cluster) doCreateVol(volPara *CreateVolPara) (vol *Vol, err error) {
 	if err != nil {
 		goto errHandler
 	}
-	vol = newVol(id, volPara.name, volPara.owner, volPara.zoneName, volPara.dpSize, uint64(volPara.capacity), uint8(volPara.replicaNum), defaultReplicaNum, volPara.followerRead, volPara.authenticate, volPara.crossZone, volPara.enableToken, createTime, volPara.volType, volPara.ecDataBlockNum, volPara.ecParityBlockNum)
+	vol = newVol(id, volPara.Name, volPara.Owner, volPara.ZoneName, volPara.DpSize, uint64(volPara.Capacity), uint8(volPara.ReplicaNum), defaultReplicaNum, volPara.FollowerRead, volPara.Authenticate, volPara.CrossZone, volPara.EnableToken, createTime, volPara.VolType, volPara.EcDataBlockNum, volPara.EcParityBlockNum)
 	// refresh oss secure
 	vol.refreshOSSSecure()
 	if err = c.syncAddVol(vol); err != nil {
 		goto errHandler
 	}
 	c.putVol(vol)
-	if volPara.enableToken {
+	if volPara.EnableToken {
 		if err = c.createToken(vol, proto.ReadOnlyToken); err != nil {
 			goto errHandler
 		}
@@ -1397,7 +1399,7 @@ func (c *Cluster) doCreateVol(volPara *CreateVolPara) (vol *Vol, err error) {
 	}
 	return
 errHandler:
-	err = fmt.Errorf("action[doCreateVol], clusterID[%v] name:%v, err:%v ", c.Name, volPara.name, err.Error())
+	err = fmt.Errorf("action[doCreateVol], clusterID[%v] name:%v, err:%v ", c.Name, volPara.Name, err.Error())
 	log.LogError(errors.Stack(err))
 	Warn(c.Name, err.Error())
 	return

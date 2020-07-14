@@ -50,6 +50,14 @@ const (
 	mms4Addr      = "127.0.0.1:8104"
 	mms5Addr      = "127.0.0.1:8105"
 	mms6Addr      = "127.0.0.1:8106"
+
+	ecs1Addr      = "127.0.0.1:10101"
+	ecs2Addr      = "127.0.0.1:10102"
+	ecs3Addr      = "127.0.0.1:10103"
+	ecs4Addr      = "127.0.0.1:10104"
+	ecs5Addr      = "127.0.0.1:10105"
+	ecs6Addr      = "127.0.0.1:10106"
+	ecs7Addr      = "127.0.0.1:10107"
 	commonVolName = "commonVol"
 	testZone1     = "zone1"
 	testZone2     = "zone2"
@@ -96,13 +104,21 @@ func createDefaultMasterServerForTest() *Server {
 	addMetaServer(mms3Addr, testZone2)
 	addMetaServer(mms4Addr, testZone2)
 	addMetaServer(mms5Addr, testZone2)
+	// add ec node
+	addEcServer(ecs1Addr, testZone1)
+	addEcServer(ecs2Addr, testZone1)
+	addEcServer(ecs3Addr, testZone2)
+	addEcServer(ecs4Addr, testZone2)
+	addEcServer(ecs5Addr, testZone2)
+	addEcServer(ecs6Addr, testZone2)
+	addEcServer(ecs7Addr, testZone2)
 	time.Sleep(5 * time.Second)
 	testServer.cluster.checkDataNodeHeartbeat()
 	testServer.cluster.checkMetaNodeHeartbeat()
 	time.Sleep(5 * time.Second)
 	testServer.cluster.scheduleToUpdateStatInfo()
-	createVolPara := &CreateVolPara{name: commonVolName, owner: "cfs", dpSize: defaultReplicaNum, mpCount: 3, capacity: 100,
-		followerRead: false, authenticate: false, ecDataBlockNum: 6, ecParityBlockNum: 3}
+	createVolPara := &proto.CreateVolPara{Name: commonVolName, Owner: "cfs", DpSize: defaultReplicaNum, MpCount: 3, Capacity: 100,
+		FollowerRead: false, Authenticate: false, EcDataBlockNum: 6, EcParityBlockNum: 3}
 	testServer.cluster.createVol(createVolPara)
 	if err != nil {
 		panic(err)
@@ -191,6 +207,10 @@ func addMetaServer(addr, zoneName string) {
 	mms.Start()
 }
 
+func addEcServer(addr, zoneName string) {
+	ecs := mocktest.NewMockEcServer(addr, zoneName)
+	ecs.Start()
+}
 func TestSetMetaNodeThreshold(t *testing.T) {
 	threshold := 0.5
 	reqURL := fmt.Sprintf("%v%v?threshold=%v", hostAddr, proto.AdminSetMetaNodeThreshold, threshold)

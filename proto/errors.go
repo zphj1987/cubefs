@@ -38,6 +38,7 @@ var (
 	ErrActiveMetaNodesTooLess = errors.New("no enough active meta node")
 	ErrInvalidMpStart         = errors.New("invalid meta partition start value")
 	ErrNoAvailDataPartition   = errors.New("no available data partition")
+	ErrNoAvailEcPartition     = errors.New("no available ec partition")
 	ErrReshuffleArray         = errors.New("the array to be reshuffled is nil")
 
 	ErrIllegalDataReplica = errors.New("data replica is illegal")
@@ -51,6 +52,7 @@ var (
 	ErrCannotBeOffLine                 = errors.New("cannot take the data replica offline")
 	ErrNoDataNodeToCreateDataPartition = errors.New("no enough data nodes for creating a data partition")
 	ErrNoZoneToCreateDataPartition     = errors.New("no zone available for creating a data partition")
+	ErrNoZoneToCreateECPartition       = errors.New("no zone available for creating a ec partition")
 	ErrNoZoneToCreateMetaPartition     = errors.New("no zone available for creating a meta partition")
 	ErrNoNodeSetToCreateDataPartition  = errors.New("no node set available for creating a data partition")
 	ErrNoNodeSetToCreateMetaPartition  = errors.New("no node set available for creating a meta partition")
@@ -150,6 +152,8 @@ const (
 	ErrCodeInvalidSecretKey
 	ErrCodeIsOwner
 	ErrCodeEcPartitionNotExists
+	ErrCodeNoAvailEcPartition
+	ErrCodeNoZoneToCreateECPartition
 )
 
 // Err2CodeMap error map to code
@@ -214,6 +218,8 @@ var Err2CodeMap = map[error]int32{
 	ErrInvalidAccessKey:                ErrCodeInvalidAccessKey,
 	ErrInvalidSecretKey:                ErrCodeInvalidSecretKey,
 	ErrIsOwner:                         ErrCodeIsOwner,
+	ErrNoAvailEcPartition:              ErrCodeNoAvailEcPartition,
+	ErrNoZoneToCreateECPartition:       ErrCodeNoZoneToCreateECPartition,
 }
 
 func ParseErrorCode(code int32) error {
@@ -283,4 +289,6 @@ var code2ErrMap = map[int32]error{
 	ErrCodeInvalidAccessKey:                ErrInvalidAccessKey,
 	ErrCodeInvalidSecretKey:                ErrInvalidSecretKey,
 	ErrCodeIsOwner:                         ErrIsOwner,
+	ErrCodeNoAvailEcPartition:              ErrNoAvailEcPartition,
+	ErrCodeNoZoneToCreateECPartition:       ErrNoZoneToCreateECPartition,
 }

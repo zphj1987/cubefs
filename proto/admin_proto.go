@@ -43,6 +43,7 @@ const (
 	ClientMetaPartition  = "/metaPartition/get"
 	ClientVolStat        = "/client/volStat"
 	ClientMetaPartitions = "/client/metaPartitions"
+	ClientEcPartitions   = "/client/ecPartitions"
 
 	//raft node APIs
 	AddRaftNode    = "/raftNode/add"
@@ -277,6 +278,7 @@ type PartitionReport struct {
 	IsLeader        bool
 	ExtentCount     int
 	NeedCompare     bool
+	IsRecover       bool
 }
 
 // DataNodeHeartbeatResponse defines the response to the data node heartbeat.
@@ -590,11 +592,10 @@ type CreateEcDataPartitionResponse struct {
 	Result      string
 }
 
-// DeleteEcDataPartitionRequest defines the request to delete a data partition.
-type DeleteEcDataPartitionRequest struct {
+// DeleteEcPartitionRequest defines the request to delete a ec partition.
+type DeleteEcPartitionRequest struct {
 	DataPartitionType string
 	PartitionId       uint64
-	PartitionSize     int
 }
 
 // DeleteEcDataPartitionResponse defines the response to the request of deleting a data partition.
@@ -604,6 +605,19 @@ type DeleteEcDataPartitionResponse struct {
 	PartitionId uint64
 }
 
+// ChangeEcPartitionMembersRequest defines the request to change members of a ec partition.
+type ChangeEcPartitionMembersRequest struct {
+	DataPartitionType string
+	PartitionId       uint64
+	Hosts             []string
+}
+
+// ChangeEcPartitionMembersRequest defines the response to the request of changing members of a ec partition.
+type ChangeEcPartitionMembersResponse struct {
+	Status      uint8
+	Result      string
+	PartitionId uint64
+}
 type ParityEcDataPartitionRequest struct {
 	PartitionId uint64
 	Hosts       []string
@@ -635,4 +649,21 @@ func NewVolInfo(name, owner string, createTime int64, status uint8, totalSize, u
 		TotalSize:  totalSize,
 		UsedSize:   usedSize,
 	}
+}
+
+type CreateVolPara struct {
+	Name             string
+	Owner            string
+	DpSize           uint64
+	MpCount          int
+	Capacity         int
+	FollowerRead     bool
+	Authenticate     bool
+	VolType          uint8
+	EcDataBlockNum   uint8
+	EcParityBlockNum uint8
+	ReplicaNum       uint8
+	CrossZone        bool
+	ZoneName         string
+	EnableToken      bool
 }

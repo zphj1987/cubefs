@@ -135,6 +135,23 @@ var (
 		"ID", "REPLICAS", "STATUS", "LEADER", "MEMBERS")
 )
 
+func formatDataPartitionTableRow(view *proto.DataPartitionResponse) string {
+	return fmt.Sprintf(dataPartitionTablePattern,
+		view.PartitionID, view.ReplicaNum, formatDataPartitionStatus(view.Status), view.LeaderAddr,
+		strings.Join(view.Hosts, ","))
+}
+var (
+	ecPartitionTablePattern = "%-8v    %-8v    %-10v    %-18v    %-18v"
+	ecPartitionTableHeader  = fmt.Sprintf(ecPartitionTablePattern,
+		"ID", "REPLICAS", "STATUS", "LEADER", "MEMBERS")
+)
+
+func formatEcPartitionTableRow(view *proto.EcPartitionResponse) string {
+	return fmt.Sprintf(ecPartitionTablePattern,
+		view.PartitionID, view.ReplicaNum, formatDataPartitionStatus(view.Status), view.LeaderAddr,
+		strings.Join(view.Hosts, ","))
+}
+
 func formatEcPartitionInfo(partition *proto.EcPartitionInfo) string {
 	var sb = strings.Builder{}
 	sb.WriteString("\n")
@@ -197,11 +214,22 @@ func formatEcReplica(indentation string, replica *proto.EcReplica, rowTable bool
 	sb.WriteString(fmt.Sprintf("%v  ReportTime     : %v\n", indentation, formatTime(replica.ReportTime)))
 	return sb.String()
 }
+var ecNodeDetailTableRowPattern = "%-6v    %-6v    %-6v    %-10v"
 
-func formatDataPartitionTableRow(view *proto.DataPartitionResponse) string {
-	return fmt.Sprintf(dataPartitionTablePattern,
-		view.PartitionID, view.ReplicaNum, formatDataPartitionStatus(view.Status), view.LeaderAddr,
-		strings.Join(view.Hosts, ","))
+func formatEcNodeDetailTableHeader() string {
+	return fmt.Sprintf(ecNodeDetailTableRowPattern, "ID", "ADDRESS",  "STATUS", "REPORT TIME")
+}
+
+func formatEcNodeDetail(en *proto.EcNodeInfo, rowTable bool) string {
+	if rowTable {
+		return fmt.Sprintf(ecNodeDetailTableRowPattern, en.ID, en.Addr, formatNodeStatus(en.IsActive), en.ReportTime)
+	}
+	var sb = strings.Builder{}
+	sb.WriteString(fmt.Sprintf("  ID                  : %v\n", en.ID))
+	sb.WriteString(fmt.Sprintf("  Address             : %v\n", en.Addr))
+	sb.WriteString(fmt.Sprintf("  IsActive            : %v\n", formatNodeStatus(en.IsActive)))
+	sb.WriteString(fmt.Sprintf("  Report time         : %v\n", en.ReportTime))
+	return sb.String()
 }
 
 var (

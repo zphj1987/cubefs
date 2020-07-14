@@ -33,8 +33,10 @@ const (
 	//resource name
 	CliResourceDataNode      = "datanode [COMMAND]"
 	CliResourceMetaNode      = "metanode"
+	CliResourceEcNode        = "ecnode"
 	CliResourceDataPartition = "datapartition"
 	CliResourceMetaPartition = "metapartition"
+	CliResourceEcPartition   = "ecpartition"
 	CliResourceTopology      = "topology"
 	CliResourceRaftNode      = "raftnode"
 	CliResourceDisk          = "disk"
@@ -56,6 +58,12 @@ const (
 	CliFlagAuthKey            = "authkey"
 	CliFlagINodeStartID       = "inode-start"
 	CliFlagId                 = "id"
+	CliFlagEcDataNum          = "data-num"
+	CliFlagEcParityNum        = "parity-num"
+	CliFlagVolType            = "vol-type"
+	CliFlagZoneName           = "zone"
+	CliFlagCrossZone          = "cross-zone"
+
 
 	//CliFlagSetDataPartitionCount	= "count" use dp-count instead
 

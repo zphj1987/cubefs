@@ -164,15 +164,19 @@ func (api *AdminAPI) UpdateVolume(volName string, capacity uint64, replicas int,
 	return
 }
 
-func (api *AdminAPI) CreateVolume(volName, owner string, mpCount int,
-	dpSize uint64, capacity uint64, replicas int, followerRead bool) (err error) {
+func (api *AdminAPI) CreateVolume(volPara *proto.CreateVolPara) (err error) {
 	var request = newAPIRequest(http.MethodGet, proto.AdminCreateVol)
-	request.addParam("name", volName)
-	request.addParam("owner", owner)
-	request.addParam("mpCount", strconv.Itoa(mpCount))
-	request.addParam("size", strconv.FormatUint(dpSize, 10))
-	request.addParam("capacity", strconv.FormatUint(capacity, 10))
-	request.addParam("followerRead", strconv.FormatBool(followerRead))
+	request.addParam("name", volPara.Name)
+	request.addParam("owner", volPara.Owner)
+	request.addParam("mpCount", strconv.Itoa(volPara.MpCount))
+	request.addParam("size", strconv.FormatUint(volPara.DpSize, 10))
+	request.addParam("capacity", strconv.Itoa(volPara.Capacity))
+	request.addParam("followerRead", strconv.FormatBool(volPara.FollowerRead))
+	request.addParam("isCrossZone", strconv.FormatBool(volPara.CrossZone))
+	request.addParam("zoneName", volPara.ZoneName)
+	request.addParam("ecDataNum", strconv.Itoa(int(volPara.EcDataBlockNum)))
+	request.addParam("ecParityNum", strconv.Itoa(int(volPara.EcParityBlockNum)))
+	request.addParam("type", strconv.Itoa(int(volPara.VolType)))
 	if _, err = api.mc.serveRequest(request); err != nil {
 		return
 	}

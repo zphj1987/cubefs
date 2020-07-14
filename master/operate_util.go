@@ -38,6 +38,13 @@ func newCreateEcDataPartitionRequest(volName string, ID uint64, partitionSize in
 	return
 }
 
+func newDeleteEcPartitionRequest(ID uint64) (req *proto.DeleteEcPartitionRequest) {
+	req = &proto.DeleteEcPartitionRequest{
+		PartitionId: ID,
+	}
+	return
+}
+
 func newCreateDataPartitionRequest(volName string, ID uint64, members []proto.Peer, dataPartitionSize int, hosts []string, createType int) (req *proto.CreateDataPartitionRequest) {
 	req = &proto.CreateDataPartitionRequest{
 		PartitionId:   ID,
@@ -46,6 +53,14 @@ func newCreateDataPartitionRequest(volName string, ID uint64, members []proto.Pe
 		Members:       members,
 		Hosts:         hosts,
 		CreateType:    createType,
+	}
+	return
+}
+
+func newChangeEcPartitionMembersRequest(ID uint64, newHosts []string) (req *proto.ChangeEcPartitionMembersRequest) {
+	req = &proto.ChangeEcPartitionMembersRequest{
+		PartitionId: ID,
+		Hosts: newHosts,
 	}
 	return
 }
