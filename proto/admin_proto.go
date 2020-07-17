@@ -281,6 +281,20 @@ type PartitionReport struct {
 	IsRecover       bool
 }
 
+// EcPartitionReport defines the partition report.
+type EcPartitionReport struct {
+	VolName         string
+	PartitionID     uint64
+	PartitionStatus int
+	Total           uint64
+	Used            uint64
+	DiskPath        string
+	IsLeader        bool
+	ExtentCount     int
+	NeedCompare     bool
+	IsRecover       bool
+	NodeIndex       uint32
+}
 // DataNodeHeartbeatResponse defines the response to the data node heartbeat.
 type DataNodeHeartbeatResponse struct {
 	Total               uint64
@@ -535,7 +549,7 @@ type EcNodeHeartbeatResponse struct {
 	RemainingCapacity   uint64 // remaining capacity to create partition
 	CreatedPartitionCnt uint32
 	MaxCapacity         uint64 // maximum capacity of disk to create partition
-	PartitionReports    []*PartitionReport
+	PartitionReports    []*EcPartitionReport
 	CellName            string
 	Status              uint8
 	Result              string
@@ -543,15 +557,15 @@ type EcNodeHeartbeatResponse struct {
 
 // CreateEcPartitionRequest defines the request to create a ec partition.
 type CreateEcPartitionRequest struct {
-	PartitionID     uint64
-	PartitionSize   int
-	VolumeID        string
-	StripeBlockSize int
-	DataNodeNum     uint32
-	ParityNodeNum   uint32
-	NodeIndex       uint32
-	DataNodes       []string
-	ParityNodes     []string
+	PartitionID uint64
+	PartitionSize uint64
+	VolumeID string
+	StripeUnitSize uint64
+	ExtentFileSize uint64
+	DataNodeNum uint32
+	ParityNodeNum uint32
+	NodeIndex uint32
+	Hosts []string
 }
 
 // CreateEcPartitionResponse defines the response to the request of creating a ec partition.
@@ -573,24 +587,6 @@ type CodecNodeClientView struct {
 }
 
 // ----------- define ec partition proto----------------
-// CreateEcDataPartitionRequest defines the request to create a data partition.
-type CreateEcDataPartitionRequest struct {
-	PartitionType string
-	PartitionId   uint64
-	PartitionSize int
-	VolumeId      string
-	IsRandomWrite bool
-	Members       []Peer
-	Hosts         []string
-	CreateType    int
-}
-
-// CreateEcDataPartitionResponse defines the response to the request of creating a data partition.
-type CreateEcDataPartitionResponse struct {
-	PartitionId uint64
-	Status      uint8
-	Result      string
-}
 
 // DeleteEcPartitionRequest defines the request to delete a ec partition.
 type DeleteEcPartitionRequest struct {

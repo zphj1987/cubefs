@@ -64,7 +64,7 @@ func (ecs *MockEcServer) register() {
 	var nodeID uint64
 	var retry int
 	for retry < 3 {
-		nodeID, err = ecs.mc.NodeAPI().AddEcNode(ecs.TcpAddr)
+		nodeID, err = ecs.mc.NodeAPI().AddEcNode(ecs.TcpAddr, ecs.zoneName)
 		if err == nil {
 			break
 		}
@@ -148,16 +148,17 @@ func (ecs *MockEcServer) handleCreateEcPartition(conn net.Conn, p *proto.Packet,
 		return
 	}
 	// Unmarshal request to entity
-	req := &proto.CreateEcDataPartitionRequest{}
+	req := &proto.CreateEcPartitionRequest{}
 	if err = json.Unmarshal(requestJson, req); err != nil {
 		return
 	}
 	// Create new  ecPartition.
 	partition := &MockEcPartition{
-		PartitionID: req.PartitionId,
-		VolName:     req.VolumeId,
+		PartitionID: req.PartitionID,
+		VolName:     req.VolumeID,
 		total:       req.PartitionSize,
 		used:        10 * util.GB,
+		NodeIndex:   req.NodeIndex,
 	}
 	ecs.partitions = append(ecs.partitions, partition)
 	return
@@ -175,11 +176,12 @@ func (ecs *MockEcServer) handleHeartbeats(conn net.Conn, pkg *proto.Packet, task
 	response.TotalPartitionSize = 120 * util.GB
 	response.MaxCapacity = 800 * util.GB
 	response.RemainingCapacity = 800 * util.GB
+	response.CellName = ecs.zoneName
 
-	response.PartitionReports = make([]*proto.PartitionReport, 0)
+	response.PartitionReports = make([]*proto.EcPartitionReport, 0)
 
 	for _, partition := range ecs.partitions {
-		vr := &proto.PartitionReport{
+		vr := &proto.EcPartitionReport{
 			PartitionID:     partition.PartitionID,
 			PartitionStatus: proto.ReadWrite,
 			Total:           120 * util.GB,
@@ -189,6 +191,7 @@ func (ecs *MockEcServer) handleHeartbeats(conn net.Conn, pkg *proto.Packet, task
 			NeedCompare:     true,
 			IsLeader:        true, //todo
 			VolName:         partition.VolName,
+			NodeIndex:       partition.NodeIndex,
 		}
 		response.PartitionReports = append(response.PartitionReports, vr)
 	}

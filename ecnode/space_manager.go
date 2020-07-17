@@ -237,10 +237,10 @@ func (e *EcNode) buildHeartbeatResponse(response *proto.EcNodeHeartbeatResponse)
 	stat.Unlock()
 
 	response.CellName = e.cellName
-	response.PartitionReports = make([]*proto.PartitionReport, 0)
+	response.PartitionReports = make([]*proto.EcPartitionReport, 0)
 	space := e.space
 	space.RangePartitions(func(partition *EcPartition) bool {
-		vr := &proto.PartitionReport{
+		vr := &proto.EcPartitionReport{
 			VolName:         partition.volumeID,
 			PartitionID:     uint64(partition.partitionID),
 			PartitionStatus: partition.Status(),
@@ -249,6 +249,7 @@ func (e *EcNode) buildHeartbeatResponse(response *proto.EcNodeHeartbeatResponse)
 			DiskPath:        partition.Disk().Path,
 			ExtentCount:     partition.GetExtentCount(),
 			NeedCompare:     true,
+			NodeIndex:       partition.nodeIndex,
 		}
 		response.PartitionReports = append(response.PartitionReports, vr)
 		return true
@@ -334,14 +335,14 @@ func (manager *SpaceManager) CreatePartition(request *proto.CreateEcPartitionReq
 
 		VolName:        request.VolumeID,
 		PartitionID:    request.PartitionID,
-		PartitionSize:  request.PartitionSize,
-		StripeUnitSize: request.StripeBlockSize,
+		PartitionSize:  int(request.PartitionSize),
+		StripeUnitSize: int(request.StripeUnitSize),
 
 		DataNodeNum:   request.DataNodeNum,
 		ParityNodeNum: request.ParityNodeNum,
 		NodeIndex:     request.NodeIndex,
-		DataNodes:     request.DataNodes,
-		ParityNodes:   request.ParityNodes,
+		DataNodes:     request.Hosts,
+		ParityNodes:   request.Hosts,
 	}
 
 	ep = manager.partitions[epCfg.PartitionID]

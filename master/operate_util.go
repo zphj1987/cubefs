@@ -28,12 +28,17 @@ import (
 	"time"
 )
 
-func newCreateEcDataPartitionRequest(volName string, ID uint64, partitionSize int, hosts []string) (req *proto.CreateEcDataPartitionRequest) {
-	req = &proto.CreateEcDataPartitionRequest{
-		PartitionId:   ID,
-		PartitionSize: partitionSize,
-		VolumeId:      volName,
-		Hosts:         hosts,
+func newCreateEcPartitionRequest(volName string, ID uint64, stripeUnitSize, extentFileSize, partitionSize uint64, dataNodeNum, parityNodeNum, nodeIndex uint32, hosts []string) (req *proto.CreateEcPartitionRequest) {
+	req = &proto.CreateEcPartitionRequest{
+		PartitionID:    ID,
+		PartitionSize:  partitionSize,
+		VolumeID:       volName,
+		StripeUnitSize: stripeUnitSize,
+		ExtentFileSize: extentFileSize,
+		DataNodeNum:    dataNodeNum,
+		ParityNodeNum:  parityNodeNum,
+		NodeIndex:      nodeIndex,
+		Hosts:          hosts,
 	}
 	return
 }

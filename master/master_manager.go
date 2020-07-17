@@ -131,6 +131,9 @@ func (m *Server) loadMetadata() {
 	if err = m.cluster.loadDataPartitions(); err != nil {
 		panic(err)
 	}
+	if err = m.cluster.loadEcPartitions(); err != nil {
+		panic(err)
+	}
 	log.LogInfo("action[loadMetadata] end")
 
 	log.LogInfo("action[loadUserInfo] begin")

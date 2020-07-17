@@ -126,6 +126,8 @@ type volValue struct {
 	VolType           uint8
 	EcDataBlockNum    uint8
 	EcParityBlockNum  uint8
+	StripeUnitSize    uint64
+	ExtentFileSize    uint64
 }
 
 func (v *volValue) Bytes() (raw []byte, err error) {
@@ -241,10 +243,14 @@ func (m *RaftCmd) setOpType() {
 		m.Op = opSyncAddMetaNode
 	case dataNodeAcronym:
 		m.Op = opSyncAddDataNode
+	case ecNodeAcronym, codecNodeAcronym:
+		m.Op = opSyncPut
 	case dataPartitionAcronym:
 		m.Op = opSyncAddDataPartition
 	case metaPartitionAcronym:
 		m.Op = opSyncAddMetaPartition
+	case ecPartitionAcronym:
+		m.Op = opSyncAddEcPartition
 	case volAcronym:
 		m.Op = opSyncAddVol
 	case clusterAcronym:

@@ -65,7 +65,7 @@ func TestVol(t *testing.T) {
 }
 
 func createVol(name string, t *testing.T) {
-	reqURL := fmt.Sprintf("%v%v?name=%v&replicas=3&type=extent&capacity=100&owner=cfs&mpCount=2&zoneName=%v", hostAddr, proto.AdminCreateVol, name, testZone2)
+	reqURL := fmt.Sprintf("%v%v?name=%v&replicaNum=3&type=0&capacity=100&owner=cfs&mpCount=2&zoneName=%v", hostAddr, proto.AdminCreateVol, name, testZone2)
 	fmt.Println(reqURL)
 	process(reqURL, t)
 	vol, err := server.cluster.getVol(name)
@@ -213,7 +213,7 @@ func TestConcurrentReadWriteDataPartitionMap(t *testing.T) {
 	var volID uint64 = 1
 	var createTime = time.Now().Unix()
 	vol := newVol(volID, name, name, "", util.DefaultDataPartitionSize, 100, defaultReplicaNum,
-		defaultReplicaNum, false, false, false, false, createTime, 0, 6, 3)
+		defaultReplicaNum, false, false, false, false, createTime, 0, 6, 3, util.DefaultStripeUnitSize, util.DefaultExtentFileSize)
 	// unavailable mp
 	mp1 := newMetaPartition(1, 1, defaultMaxMetaPartitionInodeID, 3, name, volID)
 	vol.addMetaPartition(mp1)

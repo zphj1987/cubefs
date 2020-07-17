@@ -19,18 +19,20 @@ func TestEcPartition(t *testing.T) {
 		t.Errorf("getEcDataPartition no ecdp")
 		return
 	}
-	partition := commonVol.ecDataPartitions.partitions[0]
-	getEcPartition(partition.PartitionID, t)
-	decommissionEcPartition(partition, t)
+	for _, partition := range commonVol.ecDataPartitions.partitions {
+		getEcPartition(partition.PartitionID, t)
+		decommissionEcPartition(partition, t)
+		break
+	}
 }
 
 func createEcPartition(vol *Vol, t *testing.T) {
-	oldCount := len(vol.dataPartitions.partitions)
+	oldCount := len(vol.ecDataPartitions.partitions)
 	reqURL := fmt.Sprintf("%v%v?name=%v&count=1",
 		hostAddr, proto.CreateEcDataPartition, vol.Name)
 	fmt.Println(reqURL)
 	process(reqURL, t)
-	newCount := len(vol.dataPartitions.partitions)
+	newCount := len(vol.ecDataPartitions.partitions)
 	if newCount != oldCount + 1 {
 		t.Errorf("createEcPartition failed,newCount[%v], oldCount[%v]",
 			newCount, oldCount)

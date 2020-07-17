@@ -3,6 +3,7 @@ package master
 import (
 	"fmt"
 	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/util"
 	"testing"
 	"time"
 )
@@ -21,7 +22,7 @@ func buildPanicVol() *Vol {
 	}
 	var createTime = time.Now().Unix() // record create time of this volume
 	vol := newVol(id, commonVol.Name, commonVol.Owner, "", commonVol.dataPartitionSize, commonVol.Capacity,
-		defaultReplicaNum, defaultReplicaNum, false, false, false, false, createTime, 0, 6, 3)
+		defaultReplicaNum, defaultReplicaNum, false, false, false, false, createTime, 0, 6, 3, util.DefaultStripeUnitSize, util.DefaultExtentFileSize)
 	vol.dataPartitions = nil
 	return vol
 }

@@ -13,9 +13,10 @@ type MockDataPartition struct {
 type MockEcPartition struct {
 	PartitionID      uint64
 	PersistenceHosts []string
-	total            int
+	total            uint64
 	used             uint64
 	VolName          string
+	NodeIndex        uint32
 }
 
 type MockMetaPartition struct {

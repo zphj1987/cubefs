@@ -24,6 +24,8 @@ const (
 	TB
 	PB
 	DefaultDataPartitionSize = 120 * GB
+	DefaultStripeUnitSize = 4
+	DefaultExtentFileSize = 64
 	TaskWorkerInterval       = 1
 )
 

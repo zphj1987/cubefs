@@ -235,8 +235,8 @@ errHandler:
 }
 
 func (c *Cluster) addCodecNode(nodeAddr string) (id uint64, err error) {
-	c.dnMutex.Lock()
-	defer c.dnMutex.Unlock()
+	c.cnMutex.Lock()
+	defer c.cnMutex.Unlock()
 	var codecNode *CodecNode
 	if node, ok := c.codecNodes.Load(nodeAddr); ok {
 		codecNode = node.(*CodecNode)

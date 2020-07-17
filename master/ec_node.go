@@ -28,23 +28,27 @@ import (
 
 type ECNode struct {
 	DataNode
+	EcPartitionReports  []*proto.EcPartitionReport
 }
 
 type EcNodeValue struct {
 	ID   uint64
 	Addr string
+	ZoneName  string
 }
 
 func newEcNodeValue(node *ECNode) *EcNodeValue {
 	return &EcNodeValue{
 		ID:   node.ID,
 		Addr: node.Addr,
+		ZoneName: node.ZoneName,
 	}
 }
 
-func newEcNode(addr, clusterID string) *ECNode {
+func newEcNode(addr, clusterID, zoneName string) *ECNode {
 	node := new(ECNode)
 	node.Addr = addr
+	node.ZoneName = zoneName
 	node.TaskManager = newAdminTaskManager(addr, clusterID)
 	return node
 }
@@ -58,8 +62,8 @@ func (ecNode *ECNode) updateMetric(resp *proto.EcNodeHeartbeatResponse) {
 	ecNode.Used = resp.Used
 	ecNode.AvailableSpace = resp.Available
 	ecNode.DataPartitionCount = resp.CreatedPartitionCnt
-	ecNode.DataPartitionReports = resp.PartitionReports
-	ecNode.ZoneName = DefaultZoneName
+	ecNode.EcPartitionReports = resp.PartitionReports
+	ecNode.ZoneName = resp.CellName
 	//ecNode.BadDisks = resp.BadDisks
 	if ecNode.Total == 0 {
 		ecNode.UsageRatio = 0.0
@@ -133,16 +137,16 @@ func (c *Cluster) checkEcNodeHeartbeat() {
 
 func (m *Server) addEcNode(w http.ResponseWriter, r *http.Request) {
 	var (
-		nodeAddr string
+		nodeAddr, zoneName string
 		id       uint64
 		err      error
 	)
-	if nodeAddr, err = parseAndExtractNodeAddr(r); err != nil {
+	if nodeAddr, zoneName, err = parseRequestForAddNode(r); err != nil {
 		sendErrReply(w, r, &proto.HTTPReply{Code: proto.ErrCodeParamError, Msg: err.Error()})
 		return
 	}
 
-	if id, err = m.cluster.addEcNode(nodeAddr); err != nil {
+	if id, err = m.cluster.addEcNode(nodeAddr, zoneName); err != nil {
 		sendErrReply(w, r, newErrHTTPReply(err))
 		return
 	}
@@ -266,13 +270,22 @@ func (c *Cluster) dealEcNodeHeartbeatResp(nodeAddr string, resp *proto.EcNodeHea
 	if ecNode, err = c.ecNode(nodeAddr); err != nil {
 		goto errHandler
 	}
+	if resp.CellName == "" {
+		resp.CellName = DefaultZoneName
+	}
+	if ecNode.ZoneName != resp.CellName {
+		c.t.deleteEcNode(ecNode)
+		oldZoneName := ecNode.ZoneName
+		ecNode.ZoneName = resp.CellName
+		c.adjustEcNode(ecNode)
+		log.LogWarnf("ecNode zone changed from [%v] to [%v]", oldZoneName, resp.CellName)
+	}
 
 	ecNode.updateMetric(resp)
 	if err = c.t.putEcNode(ecNode); err != nil {
 		log.LogErrorf("action[dealEcNodeHeartbeatResp] ecNode[%v],zone[%v], err[%v]", ecNode.Addr, ecNode.ZoneName, err)
 	}
 	c.updateEcNode(ecNode, resp.PartitionReports)
-	//ecNode.metaPartitionInfos = nil
 	logMsg = fmt.Sprintf("action[dealEcNodeHeartbeatResp],ecNode:%v ReportTime:%v  success", ecNode.Addr, time.Now().Unix())
 	log.LogInfof(logMsg)
 	return
@@ -282,7 +295,31 @@ errHandler:
 	return
 }
 
-func (c *Cluster) updateEcNode(ecNode *ECNode, partitions []*proto.PartitionReport) {
+func (c *Cluster) adjustEcNode(ecNode *ECNode) {
+	c.enMutex.Lock()
+	defer c.enMutex.Unlock()
+	var err error
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("action[adjustEcNode],clusterID[%v] ecNodeAddr:%v,zone[%v] err:%v ", c.Name, ecNode.Addr, ecNode.ZoneName, err.Error())
+			log.LogError(errors.Stack(err))
+			Warn(c.Name, err.Error())
+		}
+	}()
+	var zone *Zone
+	zone, err = c.t.getZone(ecNode.ZoneName)
+	if err != nil {
+		zone = newZone(ecNode.ZoneName)
+		c.t.putZone(zone)
+	}
+	if err = c.syncUpdateEcNode(ecNode); err != nil {
+		return
+	}
+	err = c.t.putEcNode(ecNode)
+	return
+}
+
+func (c *Cluster) updateEcNode(ecNode *ECNode, partitions []*proto.EcPartitionReport) {
 	for _, vr := range partitions {
 		if vr == nil {
 			continue
@@ -301,24 +338,30 @@ func (c *Cluster) updateEcNode(ecNode *ECNode, partitions []*proto.PartitionRepo
 	return
 }
 
-func (c *Cluster) addEcNode(nodeAddr string) (id uint64, err error) {
-	c.dnMutex.Lock()
-	defer c.dnMutex.Unlock()
+func (c *Cluster) addEcNode(nodeAddr, zoneName string) (id uint64, err error) {
+	c.enMutex.Lock()
+	defer c.enMutex.Unlock()
 	var ecNode *ECNode
 	if node, ok := c.ecNodes.Load(nodeAddr); ok {
 		ecNode = node.(*ECNode)
 		return ecNode.ID, nil
 	}
 
-	ecNode = newEcNode(nodeAddr, c.Name)
+	ecNode = newEcNode(nodeAddr, c.Name, zoneName)
+	_, err = c.t.getZone(zoneName)
+	if err != nil {
+		c.t.putZoneIfAbsent(newZone(zoneName))
+	}
 	// allocate ecNode id
 	if id, err = c.idAlloc.allocateCommonID(); err != nil {
 		goto errHandler
 	}
 	ecNode.ID = id
+	ecNode.ZoneName = zoneName
 	if err = c.syncAddEcNode(ecNode); err != nil {
 		goto errHandler
 	}
+	c.t.putEcNode(ecNode)
 	c.ecNodes.Store(nodeAddr, ecNode)
 	log.LogInfof("action[addEcNode],clusterID[%v] ecNodeAddr:%v success",
 		c.Name, nodeAddr)
@@ -337,6 +380,10 @@ func (c *Cluster) syncAddEcNode(ecNode *ECNode) (err error) {
 
 func (c *Cluster) syncDeleteEcNode(ecNode *ECNode) (err error) {
 	return c.syncPutEcNodeInfo(opSyncDelete, ecNode)
+}
+
+func (c *Cluster) syncUpdateEcNode(ecNode *ECNode) (err error) {
+	return c.syncPutEcNodeInfo(opSyncUpdate, ecNode)
 }
 
 func (c *Cluster) syncPutEcNodeInfo(opType uint32, ecNode *ECNode) (err error) {
@@ -528,10 +575,19 @@ func (c *Cluster) loadEcNodes() (err error) {
 			err = fmt.Errorf("action[loadEcNodes],value:%v,unmarshal err:%v", string(value), err)
 			return
 		}
-		ecNode := newEcNode(ecnv.Addr, c.Name)
+		if ecnv.ZoneName == "" {
+			ecnv.ZoneName = DefaultZoneName
+		}
+		ecNode := newEcNode(ecnv.Addr, c.Name, ecnv.ZoneName)
+		zone, err := c.t.getZone(ecnv.ZoneName)
+		if err != nil {
+			log.LogErrorf("action[loadEcNodes], getZone err:%v", err)
+			zone = newZone(ecnv.ZoneName)
+			c.t.putZoneIfAbsent(zone)
+		}
 		ecNode.ID = ecnv.ID
 		c.ecNodes.Store(ecNode.Addr, ecNode)
-		log.LogInfof("action[loadEcNodes],EcNode[%v]", ecNode.Addr)
+		log.LogInfof("action[loadEcNodes],EcNode[%v],ZoneName[%v]", ecNode.Addr, ecNode.ZoneName)
 	}
 	return
 }
@@ -571,10 +627,9 @@ func (c *Cluster) removeEcDataReplica(ecdp *EcDataPartition, addr string, valida
 		return
 	}
 	//todo delete peer?
-	if err = c.doDeleteEcReplica(ecdp, ecNode); err != nil {
+	if err = c.deleteEcReplicaFromEcNodeOptimistic(ecdp, ecNode); err != nil {
 		return
 	}
-	//todo try to tell leader to fix data after change members?
 	return
 }
 
@@ -617,7 +672,7 @@ func (c *Cluster) isEcRecovering(ecdp *EcDataPartition, addr string) (isRecover 
 	return
 }
 
-func (c *Cluster) doDeleteEcReplica(ecdp *EcDataPartition, ecNode *ECNode) (err error) {
+func (c *Cluster) deleteEcReplicaFromEcNodeOptimistic(ecdp *EcDataPartition, ecNode *ECNode) (err error) {
 	ecdp.Lock()
 	// in case ecNode is unreachable, remove replica first.
 	ecdp.removeReplicaByAddr(ecNode.Addr)
@@ -626,7 +681,7 @@ func (c *Cluster) doDeleteEcReplica(ecdp *EcDataPartition, ecNode *ECNode) (err 
 	task := ecdp.createTaskToDeleteEcPartition(ecNode.Addr)
 	_, err = ecNode.TaskManager.syncSendAdminTask(task)
 	if err != nil {
-		log.LogErrorf("action[deleteRemoteEcReplica] vol[%v], ec partition[%v], err[%v]", ecdp.VolName, ecdp.PartitionID, err)
+		log.LogErrorf("action[deleteEcReplicaFromEcNodeOptimistic] vol[%v], ec partition[%v], err[%v]", ecdp.VolName, ecdp.PartitionID, err)
 	}
 	return nil
 }

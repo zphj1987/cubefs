@@ -49,6 +49,8 @@ type Vol struct {
 	volType            uint8
 	EcDataBlockNum     uint8
 	EcParityBlockNum   uint8
+	StripeUnitSize     uint64
+	ExtentFileSize     uint64
 	MetaPartitions     map[uint64]*MetaPartition
 	mpsLock            sync.RWMutex
 	dataPartitions     *DataPartitionMap
@@ -62,7 +64,7 @@ type Vol struct {
 	sync.RWMutex
 }
 
-func newVol(id uint64, name, owner, zoneName string, dpSize, capacity uint64, dpReplicaNum, mpReplicaNum uint8, followerRead, authenticate, crossZone bool, enableToken bool, createTime int64, volType, ecDataBlockNum, ecParityBlockNum uint8) (vol *Vol) {
+func newVol(id uint64, name, owner, zoneName string, dpSize, capacity uint64, dpReplicaNum, mpReplicaNum uint8, followerRead, authenticate, crossZone bool, enableToken bool, createTime int64, volType, ecDataBlockNum, ecParityBlockNum uint8, stripeUnitSize, extentFileSize uint64) (vol *Vol) {
 	vol = &Vol{ID: id, Name: name, MetaPartitions: make(map[uint64]*MetaPartition, 0)}
 	vol.dataPartitions = newDataPartitionMap(vol)
 	vol.ecDataPartitions = newEcDataPartitionCache(vol)
@@ -82,6 +84,8 @@ func newVol(id uint64, name, owner, zoneName string, dpSize, capacity uint64, dp
 	if dpSize < util.GB {
 		dpSize = util.DefaultDataPartitionSize
 	}
+	vol.StripeUnitSize = stripeUnitSize
+	vol.ExtentFileSize = extentFileSize
 	vol.dataPartitionSize = dpSize
 	vol.Capacity = capacity
 	vol.FollowerRead = followerRead
@@ -116,7 +120,9 @@ func newVolFromVolValue(vv *volValue) (vol *Vol) {
 		vv.CreateTime,
 		vv.VolType,
 		vv.EcDataBlockNum,
-		vv.EcParityBlockNum)
+		vv.EcParityBlockNum,
+		vv.StripeUnitSize,
+		vv.ExtentFileSize)
 	// overwrite oss secure
 	vol.OSSAccessKey, vol.OSSSecretKey = vv.OSSAccessKey, vv.OSSSecretKey
 	vol.Status = vv.Status
@@ -536,8 +542,9 @@ func (vol *Vol) checkStatus(c *Cluster) {
 	log.LogInfof("action[volCheckStatus] vol[%v],status[%v]", vol.Name, vol.Status)
 	metaTasks := vol.getTasksToDeleteMetaPartitions()
 	dataTasks := vol.getTasksToDeleteDataPartitions()
+	ecTasks := vol.getTasksToDeleteEcPartitions()
 
-	if len(metaTasks) == 0 && len(dataTasks) == 0 {
+	if len(metaTasks) == 0 && len(dataTasks) == 0 && len(ecTasks) == 0{
 		vol.deleteVolFromStore(c)
 	}
 	go func() {
@@ -547,6 +554,10 @@ func (vol *Vol) checkStatus(c *Cluster) {
 
 		for _, dataTask := range dataTasks {
 			vol.deleteDataPartitionFromDataNode(c, dataTask)
+		}
+
+		for _, ecTask := range ecTasks {
+			vol.deleteEcReplicaFromEcNodePessimistic(c, ecTask)
 		}
 	}()
 
@@ -606,7 +617,8 @@ func (vol *Vol) deleteVolFromStore(c *Cluster) (err error) {
 		return
 	}
 
-	// delete the metadata of the meta and data partitionMap first
+	// delete the metadata of the ec, meta and data partitionMap first
+	vol.deleteEcPartitionsFromStore(c)
 	vol.deleteDataPartitionsFromStore(c)
 	vol.deleteMetaPartitionsFromStore(c)
 	vol.deleteTokensFromStore(c)

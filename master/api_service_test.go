@@ -76,7 +76,7 @@ func createDefaultMasterServerForTest() *Server {
 		"role": "master",
 		"ip": "127.0.0.1",
 		"listen": "8080",
-		"prof":"10088",
+		"prof":"10087",
 		"id":"1",
 		"peers": "1:127.0.0.1:8080",
 		"retainLogs":"20000",
@@ -105,8 +105,8 @@ func createDefaultMasterServerForTest() *Server {
 	addMetaServer(mms4Addr, testZone2)
 	addMetaServer(mms5Addr, testZone2)
 	// add ec node
-	addEcServer(ecs1Addr, testZone1)
-	addEcServer(ecs2Addr, testZone1)
+	addEcServer(ecs1Addr, testZone2)
+	addEcServer(ecs2Addr, testZone2)
 	addEcServer(ecs3Addr, testZone2)
 	addEcServer(ecs4Addr, testZone2)
 	addEcServer(ecs5Addr, testZone2)
@@ -115,14 +115,12 @@ func createDefaultMasterServerForTest() *Server {
 	time.Sleep(5 * time.Second)
 	testServer.cluster.checkDataNodeHeartbeat()
 	testServer.cluster.checkMetaNodeHeartbeat()
+	testServer.cluster.checkEcNodeHeartbeat()
 	time.Sleep(5 * time.Second)
 	testServer.cluster.scheduleToUpdateStatInfo()
 	createVolPara := &proto.CreateVolPara{Name: commonVolName, Owner: "cfs", DpSize: defaultReplicaNum, MpCount: 3, Capacity: 100,
-		FollowerRead: false, Authenticate: false, EcDataBlockNum: 6, EcParityBlockNum: 3}
+		FollowerRead: false, Authenticate: false, EcDataBlockNum: 4, EcParityBlockNum: 2}
 	testServer.cluster.createVol(createVolPara)
-	if err != nil {
-		panic(err)
-	}
 	vol, err := testServer.cluster.getVol(commonVolName)
 	if err != nil {
 		panic(err)
@@ -367,10 +365,10 @@ func TestGetVolSimpleInfo(t *testing.T) {
 
 func TestCreateVol(t *testing.T) {
 	name := "test_create_vol"
-	reqURL := fmt.Sprintf("%v%v?name=%v&replicas=3&type=extent&capacity=100&owner=cfstest&zoneName=%v", hostAddr, proto.AdminCreateVol, name, testZone2)
+	reqURL := fmt.Sprintf("%v%v?name=%v&replicaNum=3&type=0&capacity=100&owner=cfs&zoneName=%v", hostAddr, proto.AdminCreateVol, name, testZone2)
 	fmt.Println(reqURL)
 	process(reqURL, t)
-	userInfo, err := server.user.getUserInfo("cfstest")
+	userInfo, err := server.user.getUserInfo("cfs")
 	if err != nil {
 		t.Error(err)
 		return

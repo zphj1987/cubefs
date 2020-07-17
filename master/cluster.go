@@ -44,6 +44,8 @@ type Cluster struct {
 	createVolMutex            sync.RWMutex // create volume mutex
 	mnMutex                   sync.RWMutex // meta node mutex
 	dnMutex                   sync.RWMutex // data node mutex
+	enMutex                   sync.RWMutex // ec node mutex
+	cnMutex                   sync.RWMutex // codec node mutex
 	leaderInfo                *LeaderInfo
 	cfg                       *clusterConfig
 	retainLogs                uint64
@@ -1382,7 +1384,7 @@ func (c *Cluster) doCreateVol(volPara *proto.CreateVolPara) (vol *Vol, err error
 	if err != nil {
 		goto errHandler
 	}
-	vol = newVol(id, volPara.Name, volPara.Owner, volPara.ZoneName, volPara.DpSize, uint64(volPara.Capacity), uint8(volPara.ReplicaNum), defaultReplicaNum, volPara.FollowerRead, volPara.Authenticate, volPara.CrossZone, volPara.EnableToken, createTime, volPara.VolType, volPara.EcDataBlockNum, volPara.EcParityBlockNum)
+	vol = newVol(id, volPara.Name, volPara.Owner, volPara.ZoneName, volPara.DpSize, uint64(volPara.Capacity), uint8(volPara.ReplicaNum), defaultReplicaNum, volPara.FollowerRead, volPara.Authenticate, volPara.CrossZone, volPara.EnableToken, createTime, volPara.VolType, volPara.EcDataBlockNum, volPara.EcParityBlockNum, util.DefaultStripeUnitSize, util.DefaultExtentFileSize)
 	// refresh oss secure
 	vol.refreshOSSSecure()
 	if err = c.syncAddVol(vol); err != nil {

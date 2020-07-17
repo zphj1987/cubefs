@@ -39,6 +39,7 @@ func (c *Cluster) checkEcDataPartitions() {
 	for _, vol := range vols {
 		readWriteEcPartitions := vol.checkEcDataPartitions(c)
 		vol.ecDataPartitions.setReadWriteDataPartitions(readWriteEcPartitions, c.Name)
+		vol.ecDataPartitions.updateResponseCache(true, 0)
 		msg := fmt.Sprintf("action[checkEcDataPartitions],vol[%v] can readWrite ec partitions:%v  ", vol.Name, vol.ecDataPartitions.readableAndWritableCnt)
 		log.LogInfo(msg)
 	}

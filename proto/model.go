@@ -235,4 +235,5 @@ type EcReplica struct {
 	IsLeader        bool
 	NeedsToCompare  bool
 	DiskPath        string
+	NodeIndex       uint32
 }

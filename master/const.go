@@ -146,6 +146,10 @@ const (
 
 	opSyncPut    uint32 = 0x23
 	opSyncDelete uint32 = 0x24
+	opSyncUpdate uint32 = 0x25
+	opSyncAddEcPartition uint32 = 0x26
+	opSyncDeleteEcPartition uint32 = 0x27
+	opSyncUpdateEcPartition uint32 = 0x28
 )
 
 const (
@@ -154,7 +158,7 @@ const (
 	metaNodeAcronym        = "mn"
 	dataNodeAcronym        = "dn"
 	dataPartitionAcronym   = "dp"
-	ecDataPartitionAcronym = "ecdp"
+	ecPartitionAcronym     = "ecdp"
 	metaPartitionAcronym   = "mp"
 	volAcronym             = "vol"
 	clusterAcronym         = "c"
@@ -168,6 +172,7 @@ const (
 	metaNodePrefix         = keySeparator + metaNodeAcronym + keySeparator
 	dataNodePrefix         = keySeparator + dataNodeAcronym + keySeparator
 	dataPartitionPrefix    = keySeparator + dataPartitionAcronym + keySeparator
+	ecPartitionPrefix      = keySeparator + ecPartitionAcronym + keySeparator
 	volPrefix              = keySeparator + volAcronym + keySeparator
 	metaPartitionPrefix    = keySeparator + metaPartitionAcronym + keySeparator
 	clusterPrefix          = keySeparator + clusterAcronym + keySeparator

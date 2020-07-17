@@ -56,8 +56,7 @@ const (
 )
 
 var (
-	localIP, serverPort string
-
+	localIP, serverPort, cellName string
 	gConnPool    = util.NewConnectPool()
 	MasterClient = masterSDK.NewMasterClient(nil, false)
 )
@@ -158,7 +157,11 @@ func (e *EcNode) parseConfig(cfg *config.Config) (err error) {
 	if !regexpPort.MatchString(serverPort) {
 		return fmt.Errorf("Err:port must string")
 	}
-
+	cellName = cfg.GetString(ConfigKeyCell)
+	if err != nil {
+		return fmt.Errorf("Err:no port ")
+	}
+	e.cellName = cellName
 	e.port = serverPort
 	if len(cfg.GetArray(proto.MasterAddr)) == 0 {
 		return fmt.Errorf("Err: masterAddr unavailable")
@@ -256,7 +259,7 @@ func (e *EcNode) register(cfg *config.Config) {
 				continue
 			}
 
-			nodeID, err := MasterClient.NodeAPI().AddEcNode(e.localServerAddr)
+			nodeID, err := MasterClient.NodeAPI().AddEcNode(e.localServerAddr, e.cellName)
 			if err != nil {
 				log.LogErrorf("action[registerToMaster] cannot register this node to master[%v] err(%v).",
 					masterAddr, err)
