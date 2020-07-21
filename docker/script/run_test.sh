@@ -259,6 +259,28 @@ run_s3_test() {
     fi
 }
 
+run_ec_test() {
+    work_path=/opt/ectests;
+    echo "Running erasure coding tests"
+    echo "******************************";
+    echo "    erasure coding tests    ";
+    echo "******************************";
+
+    # install python requirements
+    echo -n "Installing python requirements  ... "
+    pip3 install -r  ${work_path}/requirements.txt &>> /dev/null
+    if [[ $? -ne 0 ]] ; then
+        echo -e "\033[31mfail\033[0m"
+        exit 1
+    fi
+    echo -e "\033[32mdone\033[0m"
+
+    python3 -m pytest ${work_path}
+    if [[ $? -ne 0 ]]; then
+        exit 1
+    fi
+}
+
 init_cli
 check_cluster
 create_cluster_user
@@ -270,5 +292,6 @@ show_cluster_info
 start_client ; sleep 2
 run_ltptest
 run_s3_test
+run_ec_test
 stop_client
 delete_volume

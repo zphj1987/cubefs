@@ -552,6 +552,7 @@ services:
             - ./script/start_client.sh:/cfs/script/start_client.sh
             - ./ltp/runtest/fs:/opt/ltp/runtest/fs
             - ./s3tests:/opt/s3tests:ro
+            - ./ectests:/opt/ectests:ro
         privileged: true
         devices:
             - /dev/fuse:/dev/fuse:rwm
