@@ -142,6 +142,10 @@ const (
 
 	//Operations: Master -> CodecNode
 	OpCodecNodeHeartbeat uint8 = 0xA0
+	//Operations: Meta -> CodecNode
+	OpIssueMigrationTask uint8 = 0xA1
+	//Operations: CodecNode -> Meta
+	OpMetaBatchExtentsUpdate uint8 = 0xA2
 
 	//Operations: Master -> EcNode
 	OpEcNodeHeartbeat          uint8 = 0xB0

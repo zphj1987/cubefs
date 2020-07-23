@@ -282,6 +282,13 @@ func (mp *metaPartition) onStart() (err error) {
 		return
 	}
 
+	err = mp.startMigrationTask()
+	if err != nil {
+		err = errors.NewErrorf("[onStart]start migration task failed, partition id=%d: %s",
+			mp.config.PartitionId, err.Error())
+		return
+	}
+
 	return
 }
 

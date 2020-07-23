@@ -49,6 +49,7 @@ type MetaNode struct {
 	metadataDir       string // root dir of the metaNode
 	raftDir           string // root dir of the raftStore log
 	metadataManager   MetadataManager
+	migrationManager  MigrationManager
 	localAddr         string
 	clusterId         string
 	raftStore         raftstore.RaftStore
@@ -120,6 +121,12 @@ func doStart(s common.Server, cfg *config.Config) (err error) {
 	}
 	if err = m.registerAPIHandler(); err != nil {
 		return
+	}
+
+	err = m.startMigrationManager()
+	if err != nil {
+		log.LogErrorf("start migration manager failed: %v", err)
+		err = nil
 	}
 
 	exporter.Init(cfg.GetString("role"), cfg)

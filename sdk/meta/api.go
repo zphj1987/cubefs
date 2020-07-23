@@ -902,3 +902,16 @@ func (mw *MetaWrapper) XAttrsList_ll(inode uint64) ([]string, error) {
 
 	return keys, nil
 }
+
+func (mw *MetaWrapper) UpdateExtentKeys(inode uint64, eks []proto.ExtentKey) error {
+	mp := mw.getPartitionByInode(inode)
+	if mp == nil {
+		return syscall.ENOENT
+	}
+
+	status, err := mw.updateExtentKeys(mp, inode, eks)
+	if err != nil || status != statusOK {
+		return statusToErrno(status)
+	}
+	return nil
+}
