@@ -112,11 +112,15 @@ const (
 	opFSMAppendMultipart
 	opFSMSyncCursor
 
-	//supplement action
+	// supplement action
 	opFSMInternalDeleteInodeBatch
 	opFSMDeleteDentryBatch
 	opFSMUnlinkInodeBatch
 	opFSMEvictInodeBatch
+
+	// migration action
+	opFSMBatchStartMigrate
+	opFSMBatchCompleteMigrate
 )
 
 var (

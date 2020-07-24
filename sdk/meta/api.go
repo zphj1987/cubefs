@@ -909,7 +909,13 @@ func (mw *MetaWrapper) UpdateExtentKeys(inode uint64, eks []proto.ExtentKey) err
 		return syscall.ENOENT
 	}
 
-	status, err := mw.updateExtentKeys(mp, inode, eks)
+	var inodes []proto.InodeExtentInfo
+	inodes = append(inodes, proto.InodeExtentInfo{
+		Inode:   inode,
+		Extents: eks,
+	})
+
+	status, err := mw.batchCompleteMigrate(mp, inodes)
 	if err != nil || status != statusOK {
 		return statusToErrno(status)
 	}

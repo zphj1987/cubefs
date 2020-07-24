@@ -28,7 +28,7 @@ import (
 const (
 	DefaultColdDataThreshold = 0               //time.Hour * 24 * 30
 	MigrationInterval        = time.Second * 5 //time.Hour
-	UpdateCodecInterval      = time.Minute
+	UpdateCodecInterval      = time.Second * 5 //time.Minute
 )
 
 type MigrationManager struct {
@@ -102,6 +102,18 @@ func (mp *metaPartition) prepareMigrationTask() (inodes []uint64, err error) {
 		return true
 	})
 
+	// valData := proto.IssueMigrationTaskRequest{
+	// 	VolName:     mp.config.VolName,
+	// 	PartitionId: mp.config.PartitionId,
+	// 	Inodes:      inodes,
+	// }
+	// val, err := json.Marshal(valData)
+	// if err != nil {
+	// 	return
+	// }
+
+	// _, err = mp.submit(opFSMBatchStartMigrate, val)
+
 	return
 }
 
@@ -160,13 +172,18 @@ func (m *MetaNode) updateCodec() (err error) {
 	m.migrationManager.codecNodes = view.CodecNodes
 	m.migrationManager.Unlock()
 
-	log.LogDebugf("updateCodec %v", view.CodecNodes)
+	log.LogErrorf("updateCodec %v", view.CodecNodes)
 
 	return
 }
 
 func (m *MetaNode) updateCodecWorker() (err error) {
 	t := time.NewTicker(UpdateCodecInterval)
+
+	err = m.updateCodec()
+	if err != nil {
+		log.LogErrorf("updateCodec failed: %v", err)
+	}
 
 	for {
 		select {

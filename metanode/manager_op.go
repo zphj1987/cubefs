@@ -1250,3 +1250,26 @@ func (m *metadataManager) opListMultipart(conn net.Conn, p *Packet, remote strin
 	_ = m.respondToClient(conn, p)
 	return
 }
+
+func (m *metadataManager) opMetaBatchCompleteMigrate(conn net.Conn, p *Packet, remoteAddr string) (err error) {
+	req := &proto.BatchCompleteMigrateRequest{}
+	if err = json.Unmarshal(p.Data, req); err != nil {
+		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+		_ = m.respondToClient(conn, p)
+		return
+	}
+	mp, err := m.getPartition(req.PartitionId)
+	if err != nil {
+		p.PacketErrorWithBody(proto.OpNotExistErr, []byte(err.Error()))
+		_ = m.respondToClient(conn, p)
+		return
+	}
+	if !m.serveProxy(conn, mp, p) {
+		return
+	}
+	err = mp.BatchCompleteMigrate(req, p)
+	_ = m.respondToClient(conn, p)
+	log.LogDebugf("%s [opMetaBatchCompleteMigrate] req: %d - %v, resp: %v, body: %s",
+		remoteAddr, p.GetReqID(), req, p.GetResultMsg(), p.Data)
+	return
+}

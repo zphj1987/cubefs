@@ -1121,16 +1121,15 @@ func (mw *MetaWrapper) batchGetXAttr(mp *MetaPartition, inodes []uint64, keys []
 	return resp.XAttrs, nil
 }
 
-func (mw *MetaWrapper) updateExtentKeys(mp *MetaPartition, inode uint64, extents []proto.ExtentKey) (status int, err error) {
-	req := &proto.UpdateExtentKeysRequest{
+func (mw *MetaWrapper) batchCompleteMigrate(mp *MetaPartition, inodes []proto.InodeExtentInfo) (status int, err error) {
+	req := &proto.BatchCompleteMigrateRequest{
 		VolName:     mw.volname,
 		PartitionId: mp.PartitionID,
-		Inode:       inode,
-		Extents:     extents,
+		Inodes:      inodes,
 	}
 
 	packet := proto.NewPacketReqID()
-	packet.Opcode = proto.OpMetaBatchExtentsUpdate
+	packet.Opcode = proto.OpMetaBatchCompleteMigrate
 	err = packet.MarshalData(req)
 	if err != nil {
 		log.LogErrorf("batch update extent: req(%v) err(%v)", *req, err)

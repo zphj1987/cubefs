@@ -117,3 +117,32 @@ func (mp *metaPartition) BatchExtentAppend(req *proto.AppendExtentKeysRequest, p
 	p.PacketErrorWithBody(resp.(uint8), nil)
 	return
 }
+
+func (mp *metaPartition) BatchCompleteMigrate(req *proto.BatchCompleteMigrateRequest, p *Packet) (err error) {
+	ino := NewInode(req.Inodes[0].Inode, 0)
+	extents := req.Inodes[0].Extents
+	for _, extent := range extents {
+		ino.Extents.Append(&proto.ExtentKey{
+			FileOffset:   extent.FileOffset,
+			PartitionId:  extent.PartitionId,
+			ExtentId:     extent.ExtentId,
+			ExtentOffset: extent.ExtentOffset,
+			Size:         extent.Size,
+			CRC:          extent.CRC,
+		})
+	}
+	val, err := ino.Marshal()
+	if err != nil {
+		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+		return
+	}
+	resp, err := mp.submit(opFSMExtentsAdd, val)
+
+	// resp, err := mp.submit(opFSMBatchCompleteMigrate, val)
+	if err != nil {
+		p.PacketErrorWithBody(proto.OpAgain, []byte(err.Error()))
+		return
+	}
+	p.PacketErrorWithBody(resp.(uint8), nil)
+	return
+}

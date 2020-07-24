@@ -14,6 +14,11 @@
 
 package proto
 
+type InodeExtentInfo struct {
+	Inode   uint64      `json:"ino"`
+	Extents []ExtentKey `json:"eks"`
+}
+
 type IssueMigrationTaskRequest struct {
 	VolName     string   `json:"vol"`
 	PartitionId uint64   `json:"pid"` // meta partition id
@@ -31,9 +36,8 @@ type GetMigrationTaskStatusResponse struct {
 	Inodes      []uint64 `json:"inos"`
 }
 
-type UpdateExtentKeysRequest struct {
-	VolName     string      `json:"vol"`
-	PartitionId uint64      `json:"pid"`
-	Inode       uint64      `json:"ino"`
-	Extents     []ExtentKey `json:"eks"`
+type BatchCompleteMigrateRequest struct {
+	VolName     string            `json:"vol"`
+	PartitionId uint64            `json:"pid"`
+	Inodes      []InodeExtentInfo `json:"inos"`
 }

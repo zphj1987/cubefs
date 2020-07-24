@@ -146,6 +146,7 @@ type OpExtent interface {
 	ExtentsList(req *proto.GetExtentsRequest, p *Packet) (err error)
 	ExtentsTruncate(req *ExtentsTruncateReq, p *Packet) (err error)
 	BatchExtentAppend(req *proto.AppendExtentKeysRequest, p *Packet) (err error)
+	BatchCompleteMigrate(req *proto.BatchCompleteMigrateRequest, p *Packet) (err error)
 }
 
 type OpMultipart interface {

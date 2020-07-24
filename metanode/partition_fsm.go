@@ -187,6 +187,8 @@ func (mp *metaPartition) Apply(command []byte, index uint64) (resp interface{}, 
 		if cursor > mp.config.Cursor {
 			mp.config.Cursor = cursor
 		}
+	case opFSMBatchStartMigrate:
+	case opFSMBatchCompleteMigrate:
 	}
 
 	return

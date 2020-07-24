@@ -166,6 +166,8 @@ func (m *metadataManager) HandleMetadataOperation(conn net.Conn, p *Packet,
 		err = m.opSetMetaNodeParams(conn, p, remoteAddr)
 	case proto.OpGetMetaNodeParams:
 		err = m.opGetMetaNodeParams(conn, p, remoteAddr)
+	case proto.OpMetaBatchCompleteMigrate:
+		err = m.opMetaBatchCompleteMigrate(conn, p, remoteAddr)
 	default:
 		err = fmt.Errorf("%s unknown Opcode: %d, reqId: %d", remoteAddr,
 			p.Opcode, p.GetReqID())
