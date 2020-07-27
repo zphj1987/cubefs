@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/util/log"
 )
 
 // ExtentAppend appends an extent.
@@ -143,6 +144,7 @@ func (mp *metaPartition) BatchCompleteMigrate(req *proto.BatchCompleteMigrateReq
 		p.PacketErrorWithBody(proto.OpAgain, []byte(err.Error()))
 		return
 	}
+	log.LogErrorf("BatchCompleteMigrate [%v] success", req)
 	p.PacketErrorWithBody(resp.(uint8), nil)
 	return
 }

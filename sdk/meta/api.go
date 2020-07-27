@@ -904,6 +904,8 @@ func (mw *MetaWrapper) XAttrsList_ll(inode uint64) ([]string, error) {
 }
 
 func (mw *MetaWrapper) UpdateExtentKeys(inode uint64, eks []proto.ExtentKey) error {
+	log.LogErrorf("UpdateExtentKeys: inode [%d], eks [%v]", inode, eks)
+
 	mp := mw.getPartitionByInode(inode)
 	if mp == nil {
 		return syscall.ENOENT

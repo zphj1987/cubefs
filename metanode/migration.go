@@ -60,9 +60,11 @@ func (mp *metaPartition) migration() {
 	var inodes []uint64
 	defer func() {
 		if err != nil {
-			log.LogErrorf("migration falid [%v]", err)
+			log.LogErrorf("migration falid [%v], inodes[%v]", err, inodes)
 		}
-		log.LogDebugf("issue migration task %v success!", inodes)
+		if len(inodes) != 0 {
+			log.LogErrorf("issue migration task [%v] success!", inodes)
+		}
 	}()
 
 	inodes, err = mp.prepareMigrationTask()
@@ -96,8 +98,12 @@ func (mp *metaPartition) migration() {
 func (mp *metaPartition) prepareMigrationTask() (inodes []uint64, err error) {
 	mp.inodeTree.Ascend(func(i BtreeItem) bool {
 		ino := i.(*Inode)
+		if (!proto.IsRegular(ino.Type)) || (ino.IsMigrated()) {
+			return true
+		}
 		if time.Since(time.Unix(ino.ModifyTime, 0)) > DefaultColdDataThreshold {
 			inodes = append(inodes, ino.Inode)
+			ino.SetMigratedMark()
 		}
 		return true
 	})
@@ -172,7 +178,7 @@ func (m *MetaNode) updateCodec() (err error) {
 	m.migrationManager.codecNodes = view.CodecNodes
 	m.migrationManager.Unlock()
 
-	log.LogErrorf("updateCodec %v", view.CodecNodes)
+	log.LogDebugf("updateCodec %v", view.CodecNodes)
 
 	return
 }
