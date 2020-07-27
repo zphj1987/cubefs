@@ -50,6 +50,8 @@ type CodecServer struct {
 	nodeID          uint64
 	localServerAddr string
 
+	masters         []string
+
 	tcpListener     net.Listener
 	stopC           chan bool
 
@@ -98,11 +100,12 @@ func (s *CodecServer) parseConfig(cfg *config.Config) error {
 	}
 	s.port = port
 
-	addrs := cfg.GetArray(proto.MasterAddr)
-	if len(addrs) == 0 {
+	s.masters = cfg.GetStringSlice(proto.MasterAddr)
+
+	if len(cfg.GetSlice(proto.MasterAddr)) == 0 {
 		return fmt.Errorf("Err: no masterAddr specified")
 	}
-	for _, ip := range addrs {
+	for _, ip := range cfg.GetSlice(proto.MasterAddr) {
 		MasterClient.AddNode(ip.(string))
 	}
 

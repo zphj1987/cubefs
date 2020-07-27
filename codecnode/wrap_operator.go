@@ -26,6 +26,9 @@ import (
 	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/util/exporter"
 	"github.com/chubaofs/chubaofs/util/log"
+
+	"github.com/chubaofs/chubaofs/sdk/meta"
+	"github.com/chubaofs/chubaofs/sdk/data/stream"
 )
 
 func (s *CodecServer) OperatePacket(p *repl.Packet, c *net.TCPConn) (err error) {
@@ -55,6 +58,8 @@ func (s *CodecServer) OperatePacket(p *repl.Packet, c *net.TCPConn) (err error) 
 	switch p.Opcode {
 	case proto.OpCodecNodeHeartbeat:
 		s.handleHeartbeatPacket(p)
+	case proto.OpIssueMigrationTask:
+		s.handleEcMigrationTask(p, c)
 	default:
 		p.PackErrorBody(repl.ErrorUnknownOp.Error(), repl.ErrorUnknownOp.Error()+strconv.Itoa(int(p.Opcode)))
 	}
@@ -105,3 +110,133 @@ func (s *CodecServer) buildHeartBeatResponse(response *proto.CodecNodeHeartbeatR
 	response.Status = proto.TaskSucceeds
 }
 
+func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
+	var err error
+	req := &proto.IssueMigrationTaskRequest{}
+	err = json.Unmarshal(p.Data, req)
+	defer func() {
+		if err != nil {
+			p.PackErrorBody("ActionEcMigrationTask", err.Error())
+		} else {
+			p.PacketOkReply()
+		}
+	}()
+	if err != nil {
+		return
+	}
+
+	var metaConfig = &meta.MetaConfig{
+		Volume:        req.VolName,
+		Masters:       s.masters,
+		Authenticate:  false,
+		ValidateOwner: false,
+		OnAsyncTaskError: func(err error) {
+			return
+		},
+	}
+	var metaWrapper *meta.MetaWrapper
+	if metaWrapper, err = meta.NewMetaWrapper(metaConfig); err != nil {
+		return
+	}
+	defer func() {
+		metaWrapper.Close()
+	}()
+
+	var extentConfig = &stream.ExtentConfig{
+		Volume:            req.VolName,
+		Masters:           s.masters,
+		FollowerRead:      true,
+		OnAppendExtentKey: metaWrapper.AppendExtentKey,
+		OnGetExtents:      metaWrapper.GetExtents,
+		OnTruncate:        metaWrapper.Truncate,
+	}
+	var ec *stream.ExtentClient
+	if ec, err = stream.NewExtentClient(extentConfig); err != nil {
+		return
+	}
+
+	ecl, err := NewEcClient(req.VolName, s.masters)
+	if err != nil {
+		return
+	}
+
+	for _, i := range req.Inodes {
+		go func(inode uint64) {
+			var err error
+
+			var extentKeys []proto.ExtentKey
+
+			defer func() {
+				metaWrapper.UpdateExtentKeys(inode, extentKeys)
+			}()
+
+			if err = ec.OpenStream(inode); err != nil {
+				return
+			}
+			defer func() {
+				ec.CloseStream(inode)
+			}()
+			if err = ec.RefreshExtentsCache(inode); err != nil {
+				return
+			}
+			size, _, _ := ec.FileSize(inode)
+
+			pid, err := ecl.GetPartitionIdForWrite()
+			if err != nil {
+				return
+			}
+
+			dataNum, parityNum, extentSize, stripeSize, err := ecl.GetPartitionInfo(pid)
+			if err != nil {
+				return
+			}
+
+			ech, err := NewEcHandler(int(stripeSize), int(dataNum), int(parityNum))
+			if err != nil {
+				return
+			}
+
+			extents, err := ecl.CreateExtentsForWrite(pid, uint64(size))
+			if err != nil {
+				return
+			}
+
+			inbuf := make([]byte, extentSize * dataNum)
+			outbufs := make([][]byte, dataNum + parityNum)
+			for i := 0; i < int(dataNum + parityNum); i++ {
+				outbufs = append(outbufs, make([]byte, extentSize))
+			}
+
+			extentKeys = make([]proto.ExtentKey, len(extents))
+
+			offset := 0
+			for k, eid := range extents {
+				n, err := ec.Read(inode, inbuf, offset, int(extentSize * dataNum))
+				if err != nil {
+					return
+				}
+				for i := uint32(0); i < extentSize; i += stripeSize {
+					shards, err := ech.Encode(inbuf[i * dataNum : (i + stripeSize) * dataNum])
+					if err != nil {
+						return
+					}
+					for j, shard := range shards {
+						copy(outbufs[j][i:i+stripeSize], shard)
+					}
+				}
+				if err = ecl.Write(outbufs, eid, pid); err != nil {
+					return
+				}
+
+				extentKeys[k].FileOffset = uint64(offset)
+				extentKeys[k].PartitionId = pid
+				extentKeys[k].ExtentId = eid
+				extentKeys[k].ExtentOffset = 0
+				extentKeys[k].Size = uint32(n)
+
+				offset += n
+			}
+
+		}(i)
+	}
+}

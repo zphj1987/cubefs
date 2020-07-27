@@ -14,7 +14,7 @@ type EcHandler struct {
 	encoder             reedsolomon.Encoder
 }
 
-func NewEcCoder(blockSize, dataShardsNum, parityShardsNum int) (ech *EcHandler, err error) {
+func NewEcHandler(blockSize, dataShardsNum, parityShardsNum int) (ech *EcHandler, err error) {
 	var enc reedsolomon.Encoder
 	if enc, err = reedsolomon.New(dataShardsNum, parityShardsNum); err != nil {
 		return
@@ -29,6 +29,10 @@ func NewEcCoder(blockSize, dataShardsNum, parityShardsNum int) (ech *EcHandler, 
 	ech.encoder = enc
 
 	return
+}
+
+func NewEcCoder(blockSize, dataShardsNum, parityShardsNum int) (ech *EcHandler, err error) {
+	return NewEcHandler(blockSize, dataShardsNum, parityShardsNum)
 }
 
 func (ech *EcHandler) GetBlockSize() int {

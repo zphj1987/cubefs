@@ -439,6 +439,8 @@ type EcPartitionResponse struct {
 	LeaderAddr     string
 	DataUnitsNum   uint8
 	ParityUnitsNum uint8
+	StripeUnitSize uint32
+	ExtentFileSize uint32
 }
 
 // EcPartitionsView defines the view of a ec partition
