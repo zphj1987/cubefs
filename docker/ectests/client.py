@@ -25,7 +25,7 @@ logger.level("DEBUG")
 class Client:
     def __init__(self, path):
         self.mount_point = path
-        self.file_map = []
+        self.file_map = {}
 
     def start(self):
         master.admin_create_vol(name=const.testVol1, capacity=30, owner="ltptest", mp_count=3, replica_num=3, size=120, follower_read=True, cross_zone=False, zone_name="default", enable_token=False)

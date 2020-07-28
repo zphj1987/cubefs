@@ -156,6 +156,8 @@ func newVolValue(vol *Vol) (vv *volValue) {
 		VolType:           vol.volType,
 		EcDataBlockNum:    vol.EcDataBlockNum,
 		EcParityBlockNum:  vol.EcParityBlockNum,
+		StripeUnitSize:    vol.StripeUnitSize,
+		ExtentFileSize:    vol.ExtentFileSize,
 	}
 	return
 }

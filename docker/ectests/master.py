@@ -28,7 +28,6 @@ def admin_create_vol(name, capacity, owner, mp_count, replica_num, size, followe
             const.crossZoneKey: cross_zone, const.zoneNameKey: zone_name, const.enableTokenKey: enable_token}
     response = requests.get(url, params=parm)
     assert response.status_code == 200
-    assert json.loads(response.text)['code'] == 0
     return response.text
 
 

@@ -384,6 +384,8 @@ func (ecdp *EcDataPartition) convertToEcPartitionResponse() (ecdpr *proto.EcPart
 	ecdpr.DataUnitsNum = ecdp.DataUnitsNum
 	ecdpr.ParityUnitsNum = ecdp.ParityUnitsNum
 	ecdpr.ReplicaNum = ecdp.ReplicaNum
+	ecdpr.StripeUnitSize = uint32(ecdp.StripeUnitSize)
+	ecdpr.ExtentFileSize = uint32(ecdp.ExtentFileSize)
 	return
 }
 
