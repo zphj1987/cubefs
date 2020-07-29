@@ -15,7 +15,6 @@
 package ecnode
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -32,36 +31,10 @@ func (e *EcNode) getPartitionsAPI(w http.ResponseWriter, r *http.Request) {
 
 	partitions := make([]interface{}, 0)
 	e.space.RangePartitions(func(ep *EcPartition) bool {
-		partition := &struct {
-			ID              uint64   `json:"partition_id"`
-			Size            int      `json:"size"`
-			Used            int      `json:"used"`
-			Status          int      `json:"status"`
-			Path            string   `json:"path"`
-			DataNodeNum     uint32   `json:"data_node_num"`
-			ParityNodeNum   uint32   `json:"parity_node_num"`
-			NodeIndex       uint32   `json:"node_index"`
-			DataNodes       []string `json:"data_nodes"`
-			ParityNodes     []string `json:"parity_nodes"`
-			StripeSize      uint32   `json:"stripe_size"`
-			StripeUnitSize uint32   `json:"stripe_unit_size"`
-		}{
-			ID:              ep.partitionID,
-			Size:            ep.Size(),
-			Used:            ep.Used(),
-			Status:          ep.Status(),
-			Path:            ep.Path(),
-			DataNodeNum:     ep.DataNodeNum(),
-			ParityNodeNum:   ep.ParityNodeNum(),
-			NodeIndex:       ep.NodeIndex(),
-			DataNodes:       ep.DataNodes(),
-			ParityNodes:     ep.ParityNodes(),
-			StripeSize:      ep.StripeSize(),
-			StripeUnitSize: ep.StripeUnitSize(),
-		}
-		partitions = append(partitions, partition)
+		partitions = append(partitions, ep.EcPartitionMetaData)
 		return true
 	})
+
 	result := &struct {
 		Partitions     []interface{} `json:"partitions"`
 		PartitionCount int           `json:"partitionCount"`
@@ -123,31 +96,15 @@ func (e *EcNode) getRaftStatusAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *EcNode) buildSuccessResp(w http.ResponseWriter, data interface{}) {
-	e.buildJSONResp(w, http.StatusOK, data, "")
+	err := Response(w, http.StatusOK, data, "")
+	if err != nil {
+		log.LogErrorf("response fail. error:%v, data:%v", err, data)
+	}
 }
 
 func (e *EcNode) buildFailureResp(w http.ResponseWriter, code int, msg string) {
-	e.buildJSONResp(w, code, nil, msg)
-}
-
-func (e *EcNode) buildJSONResp(w http.ResponseWriter, code int, data interface{}, msg string) {
-	var (
-		jsonBody []byte
-		err      error
-	)
-	w.WriteHeader(code)
-	w.Header().Set("Content-Type", "application/json")
-	body := struct {
-		Code int         `json:"code"`
-		Data interface{} `json:"data"`
-		Msg  string      `json:"msg"`
-	}{
-		Code: code,
-		Data: data,
-		Msg:  msg,
+	err := Response(w, code, nil, msg)
+	if err != nil {
+		log.LogErrorf("response fail. error:%v, code:%v msg:%v", err, code, msg)
 	}
-	if jsonBody, err = json.Marshal(body); err != nil {
-		return
-	}
-	w.Write(jsonBody)
 }

@@ -30,13 +30,13 @@ const (
 
 // Config defines the struct of a configuration in general.
 type Config struct {
-	data map[string]interface{}
+	Data map[string]interface{}
 	Raw  []byte
 }
 
 func newConfig() *Config {
 	result := new(Config)
-	result.data = make(map[string]interface{})
+	result.Data = make(map[string]interface{})
 	return result
 }
 
@@ -53,7 +53,7 @@ func LoadConfigFile(filename string) (*Config, error) {
 // LoadConfigString loads config information from a JSON string.
 func LoadConfigString(s string) *Config {
 	result := newConfig()
-	err := json.Unmarshal([]byte(s), &result.data)
+	err := json.Unmarshal([]byte(s), &result.Data)
 	if err != nil {
 		log.Fatalf("error parsing config string %s: %s", s, err)
 	}
@@ -64,14 +64,14 @@ func (c *Config) parse(fileName string) error {
 	jsonFileBytes, err := ioutil.ReadFile(fileName)
 	c.Raw = jsonFileBytes
 	if err == nil {
-		err = json.Unmarshal(jsonFileBytes, &c.data)
+		err = json.Unmarshal(jsonFileBytes, &c.Data)
 	}
 	return err
 }
 
 // GetString returns a string for the config key.
 func (c *Config) GetString(key string) string {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return ""
 	}
@@ -83,7 +83,7 @@ func (c *Config) GetString(key string) string {
 
 // GetFloat returns a float value for the config key.
 func (c *Config) GetFloat(key string) float64 {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return -1
 	}
@@ -95,7 +95,7 @@ func (c *Config) GetFloat(key string) float64 {
 
 // returns a bool value for the config key with default val when not present
 func (c *Config) GetBoolWithDefault(key string, defval bool) bool {
-	_, present := c.data[key]
+	_, present := c.Data[key]
 	if !present {
 		return defval
 	}
@@ -104,7 +104,7 @@ func (c *Config) GetBoolWithDefault(key string, defval bool) bool {
 
 // GetBool returns a bool value for the config key.
 func (c *Config) GetBool(key string) bool {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return false
 	}
@@ -121,7 +121,7 @@ func (c *Config) GetBool(key string) bool {
 
 // GetBool returns a int value for the config key.
 func (c *Config) GetInt(key string) int64 {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return 0
 	}
@@ -133,7 +133,7 @@ func (c *Config) GetInt(key string) int64 {
 
 // GetBool returns a int64 value for the config key.
 func (c *Config) GetInt64(key string) int64 {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return 0
 	}
@@ -154,7 +154,7 @@ func (c *Config) GetInt64(key string) int64 {
 
 // GetSlice returns an array for the config key.
 func (c *Config) GetSlice(key string) []interface{} {
-	result, present := c.data[key]
+	result, present := c.Data[key]
 	if !present {
 		return []interface{}(nil)
 	}
@@ -163,7 +163,7 @@ func (c *Config) GetSlice(key string) []interface{} {
 
 // GetArray returns an array for the config key.
 func (c *Config) GetArray(key string) []interface{} {
-	result, present := c.data[key]
+	result, present := c.Data[key]
 	if !present {
 		return []interface{}(nil)
 	}
@@ -181,7 +181,7 @@ func (c *Config) GetStringSlice(key string) []string {
 
 // Check and get a string for the config key.
 func (c *Config) CheckAndGetString(key string) (string, bool) {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return "", false
 	}
@@ -193,7 +193,7 @@ func (c *Config) CheckAndGetString(key string) (string, bool) {
 
 // GetBool returns a bool value for the config key.
 func (c *Config) CheckAndGetBool(key string) (bool, bool) {
-	x, present := c.data[key]
+	x, present := c.Data[key]
 	if !present {
 		return false, false
 	}

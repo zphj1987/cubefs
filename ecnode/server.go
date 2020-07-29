@@ -57,8 +57,8 @@ const (
 
 var (
 	localIP, serverPort, cellName string
-	gConnPool    = util.NewConnectPool()
-	MasterClient = masterSDK.NewMasterClient(nil, false)
+	gConnPool                     = util.NewConnectPool()
+	MasterClient                  = masterSDK.NewMasterClient(nil, false)
 )
 
 const (
@@ -77,10 +77,6 @@ type EcNode struct {
 	localIP         string
 	localServerAddr string
 	nodeID          uint64
-	raftDir         string
-	raftHeartbeat   string
-	raftReplica     string
-	//raftStore raftstore.RaftStroe
 
 	tcpListener net.Listener
 	stopC       chan bool
@@ -130,7 +126,7 @@ func doStart(server common.Server, cfg *config.Config) (err error) {
 	if err != nil {
 		return
 	}
-	go e.registerHandler()
+	//go e.registerHandler()
 
 	return
 }
@@ -252,6 +248,7 @@ func (e *EcNode) register(cfg *config.Config) {
 				localIP = string(ci.Ip)
 			}
 			e.localServerAddr = fmt.Sprintf("%s:%s", localIP, e.port)
+			fmt.Println(e.localServerAddr)
 			if !util.IsIPV4(localIP) {
 				log.LogErrorf("action[registerToMaster] got an invalid local ip(%v) from master(%v).",
 					localIP, masterAddr)

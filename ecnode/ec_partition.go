@@ -15,13 +15,10 @@
 package ecnode
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chubaofs/chubaofs/codecnode"
 	"github.com/chubaofs/chubaofs/proto"
-	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/storage"
 	"github.com/chubaofs/chubaofs/util/log"
 	"io/ioutil"
@@ -30,7 +27,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -44,61 +40,32 @@ const (
 )
 
 type EcPartition struct {
-	clusterID string
-
-	partitionID   uint64
-	partitionSize int
-	volumeID      string
-
-	dataNodeNum    uint32
-	parityNodeNum  uint32
-	nodeIndex      uint32
-	dataNodes      []string
-	parityNodes    []string
-	stripeSize     uint32
-	stripeUnitSize uint32
+	EcPartitionMetaData
 
 	partitionStatus int
-
-	disk        *Disk
-	path        string
-	used        int
-	extentStore *storage.ExtentStore
-	storeC      chan uint64
-	stopC       chan bool
+	disk            *Disk
+	path            string
+	used            uint64
+	extentStore     *storage.ExtentStore
+	storeC          chan uint64
+	stopC           chan bool
 
 	intervalToUpdatePartitionSize int64
 	loadExtentHeaderStatus        int
-
-	config *EcPartitionCfg
-}
-
-type EcPartitionCfg struct {
-	VolName        string `json:"vol_name"`
-	ClusterID      string `json:"cluster_id"`
-	PartitionID    uint64 `json:"partition_id"`
-	PartitionSize  int    `json:"partition_size"`
-	StripeUnitSize int    `json:"stripe_unit_size"`
-
-	DataNodeNum   uint32   `json:"data_node_num"`
-	ParityNodeNum uint32   `json:"parity_node_num"`
-	NodeIndex     uint32   `json:"node_index"`
-	DataNodes     []string `json:"data_nodes"`
-	ParityNodes   []string `json:"parity_nodes"`
 }
 
 type EcPartitionMetaData struct {
-	PartitionID    uint64
-	PartitionSize  int
-	VolumeID       string
-	StripeUnitSize int
-	DataNodeNum    uint32
-	ParityNodeNum  uint32
-	NodeIndex      uint32
-	DataNodes      []string
-	ParityNodes    []string
+	PartitionID    uint64   `json:"partition_id"`
+	PartitionSize  uint64   `json:"partition_size"`
+	VolumeID       string   `json:"vol_name"`
+	StripeUnitSize uint64   `json:"stripe_unit_size"`
+	ExtentFileSize uint64   `json:"extent_file_size"`
+	DataNodeNum    uint32   `json:"data_node_num"`
+	ParityNodeNum  uint32   `json:"parity_node_num"`
+	NodeIndex      uint32   `json:"node_index"`
+	Hosts          []string `json:"hosts"`
 
-	CreateTime string
+	CreateTime string `json:"create_time"`
 }
 
 // Disk returns the disk instance.
@@ -116,18 +83,18 @@ func (ep *EcPartition) Status() int {
 }
 
 // Size returns the partition size.
-func (ep *EcPartition) Size() int {
-	return ep.partitionSize
+func (ep *EcPartition) Size() uint64 {
+	return ep.PartitionSize
 }
 
 // Used returns the used space.
-func (ep *EcPartition) Used() int {
+func (ep *EcPartition) Used() uint64 {
 	return ep.used
 }
 
 // Available returns the available space.
-func (ep *EcPartition) Available() int {
-	return ep.partitionSize - ep.used
+func (ep *EcPartition) Available() uint64 {
+	return ep.PartitionSize - ep.used
 }
 
 func (ep *EcPartition) GetExtentCount() int {
@@ -136,34 +103,6 @@ func (ep *EcPartition) GetExtentCount() int {
 
 func (ep *EcPartition) Path() string {
 	return ep.path
-}
-
-func (ep *EcPartition) DataNodeNum() uint32 {
-	return ep.dataNodeNum
-}
-
-func (ep *EcPartition) ParityNodeNum() uint32 {
-	return ep.parityNodeNum
-}
-
-func (ep *EcPartition) NodeIndex() uint32 {
-	return ep.nodeIndex
-}
-
-func (ep *EcPartition) DataNodes() []string {
-	return ep.dataNodes
-}
-
-func (ep *EcPartition) ParityNodes() []string {
-	return ep.parityNodes
-}
-
-func (ep *EcPartition) StripeSize() uint32 {
-	return ep.stripeSize
-}
-
-func (ep *EcPartition) StripeUnitSize() uint32 {
-	return ep.stripeUnitSize
 }
 
 func (ep *EcPartition) ExtentStore() *storage.ExtentStore {
@@ -206,7 +145,7 @@ func (ep *EcPartition) computeUsage() {
 		}
 		used += file.Size()
 	}
-	ep.used = int(used)
+	ep.used = uint64(used)
 	ep.intervalToUpdatePartitionSize = time.Now().Unix()
 }
 
@@ -214,7 +153,7 @@ func (ep *EcPartition) statusUpdate() {
 	status := proto.ReadWrite
 	ep.computeUsage()
 
-	if ep.used >= ep.partitionSize {
+	if ep.used >= ep.PartitionSize {
 		status = proto.ReadOnly
 	}
 	if ep.extentStore.GetExtentCount() >= storage.MaxExtentCount {
@@ -242,31 +181,17 @@ func (ep *EcPartition) statusUpdateScheduler() {
 
 // PersistMetaData persists the file metadata on the disk
 func (ep EcPartition) PersistMetaData() (err error) {
-	fileName := path.Join(ep.Path(), TempMetaDataFileName)
-	metadataFile, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
+	tempFileFilePath := path.Join(ep.Path(), TempMetaDataFileName)
+	metadataFile, err := os.OpenFile(tempFileFilePath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return
 	}
+
 	defer func() {
-		metadataFile.Sync()
-		metadataFile.Close()
-		os.Remove(fileName)
+		_ = os.Remove(tempFileFilePath)
 	}()
 
-	md := &EcPartitionMetaData{
-		PartitionID:    ep.config.PartitionID,
-		PartitionSize:  ep.config.PartitionSize,
-		VolumeID:       ep.config.VolName,
-		StripeUnitSize: ep.config.StripeUnitSize,
-		DataNodeNum:    ep.config.DataNodeNum,
-		ParityNodeNum:  ep.config.ParityNodeNum,
-		NodeIndex:      ep.config.NodeIndex,
-		DataNodes:      ep.config.DataNodes,
-		ParityNodes:    ep.config.ParityNodes,
-
-		CreateTime: time.Now().Format(TimeLayout),
-	}
-	metadata, err := json.Marshal(md)
+	metadata, err := json.Marshal(ep.EcPartitionMetaData)
 	if err != nil {
 		return
 	}
@@ -275,39 +200,37 @@ func (ep EcPartition) PersistMetaData() (err error) {
 	if err != nil {
 		return
 	}
-	log.LogInfof("PersistMetaData EcPartition(%v) data(%v)", ep.partitionID, string(metadata))
-	err = os.Rename(fileName, path.Join(ep.Path(), EcPartitionMetaDataFileName))
+
+	err = metadataFile.Sync()
+	if err != nil {
+		return
+	}
+
+	err = metadataFile.Close()
+	if err != nil {
+		return
+	}
+
+	log.LogInfof("PersistMetaData EcPartition(%v) data(%v)", ep.PartitionID, string(metadata))
+	err = os.Rename(tempFileFilePath, path.Join(ep.Path(), EcPartitionMetaDataFileName))
+
 	return
 }
 
 // newEcPartition
-func newEcPartition(epCfg *EcPartitionCfg, disk *Disk) (ep *EcPartition, err error) {
-	partitionID := epCfg.PartitionID
-	dataPath := path.Join(disk.Path, fmt.Sprintf(EcPartitionPrefix+"_%v_%v", partitionID, epCfg.PartitionSize))
+func newEcPartition(epMetaData *EcPartitionMetaData, disk *Disk) (ep *EcPartition, err error) {
+	partitionID := epMetaData.PartitionID
+	dataPath := path.Join(disk.Path, fmt.Sprintf(EcPartitionPrefix+"_%v_%v", partitionID, epMetaData.PartitionSize))
 	partition := &EcPartition{
-		clusterID: epCfg.ClusterID,
-
-		partitionID:    epCfg.PartitionID,
-		partitionSize:  epCfg.PartitionSize,
-		volumeID:       epCfg.VolName,
-		stripeUnitSize: uint32(epCfg.StripeUnitSize),
-		dataNodeNum:    epCfg.DataNodeNum,
-		parityNodeNum:  epCfg.ParityNodeNum,
-		nodeIndex:      epCfg.NodeIndex,
-		dataNodes:      epCfg.DataNodes,
-		parityNodes:    epCfg.ParityNodes,
-
-		disk:            disk,
-		path:            dataPath,
-		stopC:           make(chan bool, 0),
-		storeC:          make(chan uint64, 128),
-		partitionStatus: proto.ReadWrite,
-		config:          epCfg,
+		EcPartitionMetaData: *epMetaData,
+		disk:                disk,
+		path:                dataPath,
+		stopC:               make(chan bool, 0),
+		storeC:              make(chan uint64, 128),
+		partitionStatus:     proto.ReadWrite,
 	}
 
-	partition.stripeSize = partition.stripeUnitSize * partition.dataNodeNum
-
-	partition.extentStore, err = storage.NewExtentStore(partition.path, epCfg.PartitionID, epCfg.PartitionSize)
+	partition.extentStore, err = storage.NewExtentStore(partition.path, partition.PartitionID, int(partition.PartitionSize))
 	if err != nil {
 		return
 	}
@@ -336,21 +259,7 @@ func LoadEcPartition(partitionDir string, disk *Disk) (ep *EcPartition, err erro
 		return
 	}
 
-	epCfg := &EcPartitionCfg{
-		VolName:        metaData.VolumeID,
-		ClusterID:      disk.space.GetClusterID(),
-		PartitionID:    metaData.PartitionID,
-		PartitionSize:  metaData.PartitionSize,
-		StripeUnitSize: metaData.StripeUnitSize,
-
-		DataNodeNum:   metaData.DataNodeNum,
-		ParityNodeNum: metaData.ParityNodeNum,
-		NodeIndex:     metaData.NodeIndex,
-		DataNodes:     metaData.DataNodes,
-		ParityNodes:   metaData.ParityNodes,
-	}
-
-	ep, err = newEcPartition(epCfg, disk)
+	ep, err = newEcPartition(metaData, disk)
 	if err != nil {
 		return
 	}
@@ -361,8 +270,8 @@ func LoadEcPartition(partitionDir string, disk *Disk) (ep *EcPartition, err erro
 }
 
 // CreateEcPartition create ec partition and return its instance
-func CreateEcPartition(epCfg *EcPartitionCfg, disk *Disk, request *proto.CreateEcPartitionRequest) (ep *EcPartition, err error) {
-	ep, err = newEcPartition(epCfg, disk)
+func CreateEcPartition(epMetaData *EcPartitionMetaData, disk *Disk) (ep *EcPartition, err error) {
+	ep, err = newEcPartition(epMetaData, disk)
 	if err != nil {
 		return
 	}
@@ -374,22 +283,6 @@ func CreateEcPartition(epCfg *EcPartitionCfg, disk *Disk, request *proto.CreateE
 
 	disk.AddSize(uint64(ep.Size()))
 	return
-}
-
-// IsStripeRead return whether nead read from other node in one stripe
-func (ep *EcPartition) IsStripeRead(offset int64, size uint32) (isStripeRead bool) {
-	if size > ep.stripeUnitSize {
-		return true
-	}
-
-	firstOffsetIndex := uint32(offset) % ep.stripeSize / ep.stripeUnitSize
-	lastOffsetIndex := (uint32(offset) + size - 1) % ep.stripeSize / ep.stripeUnitSize
-
-	if firstOffsetIndex != ep.nodeIndex || lastOffsetIndex != ep.nodeIndex {
-		return true
-	}
-
-	return false
 }
 
 func (ep *EcPartition) localRead(extentID uint64, offset int64, size uint32) ([]byte, error) {
@@ -408,11 +301,11 @@ func (ep *EcPartition) remoteRead(nodeIndex uint32, extentID uint64, offset int6
 	request.Opcode = proto.OpStreamRead
 	request.Size = size
 	request.ExtentOffset = offset
-	request.PartitionID = ep.partitionID
+	request.PartitionID = ep.PartitionID
 	request.ExtentID = extentID
 	request.Magic = proto.ProtoMagic
 
-	conn, err := net.Dial("tcp", ep.dataNodes[nodeIndex])
+	conn, err := net.Dial("tcp", ep.Hosts[nodeIndex])
 	if err != nil {
 		return
 	}
@@ -420,20 +313,20 @@ func (ep *EcPartition) remoteRead(nodeIndex uint32, extentID uint64, offset int6
 
 	err = request.WriteToConn(conn)
 	if err != nil {
-		err = errors.New(fmt.Sprintf("ExtentStripeRead to host(%v) error(%v)", ep.dataNodes[nodeIndex], err))
+		err = errors.New(fmt.Sprintf("ExtentStripeRead to host(%v) error(%v)", ep.Hosts[nodeIndex], err))
 		log.LogWarnf("action[streamRepairExtent] err(%v).", err)
 		return
 	}
 
 	err = request.ReadFromConn(conn, proto.ReadDeadlineTime) // read the response
 	if err != nil {
-		err = errors.New(fmt.Sprintf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v)", ep.partitionID,
-			ep.dataNodes[nodeIndex], err))
+		err = errors.New(fmt.Sprintf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v)", ep.PartitionID,
+			ep.Hosts[nodeIndex], err))
 		return
 	}
 	if request.ResultCode != proto.OpOk {
 		err = errors.New(fmt.Sprintf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v) resultCode(%v)",
-			ep.partitionID, ep.dataNodes[nodeIndex], err, request.ResultCode))
+			ep.PartitionID, ep.Hosts[nodeIndex], err, request.ResultCode))
 		return
 	}
 
@@ -442,127 +335,6 @@ func (ep *EcPartition) remoteRead(nodeIndex uint32, extentID uint64, offset int6
 	return
 }
 
-func (ep *EcPartition) readFromEcNode(partitionID uint64, extentID uint64, offset int64, size uint32, stripeIndex int64) ([]byte, error) {
-	dataMap := &sync.Map{}
-	parityMap := &sync.Map{}
-	dataNodeWaitGroup := sync.WaitGroup{}
-	dataNodeWaitGroup.Add(int(ep.dataNodeNum))
-	parityNodeWaitGroup := sync.WaitGroup{}
-	parityNodeWaitGroup.Add(int(ep.parityNodeNum))
-
-	for i := 0; i < int(ep.dataNodeNum); i++ {
-		nodeAddr := ep.dataNodes[i]
-		go func(nodeIndex int, nodeAddr string, partitionID uint64, extentID uint64, offset int64, size uint32) {
-			request := repl.NewExtentStripeRead(partitionID, extentID, offset, size)
-			defer func() {
-				dataNodeWaitGroup.Done()
-			}()
-
-			ep.doRead(request, nodeIndex, nodeAddr, dataMap)
-		}(i, nodeAddr, partitionID, extentID, offset, size)
-	}
-
-	for i := 0; i < int(ep.parityNodeNum); i++ {
-		nodeAddr := ep.parityNodes[i]
-		go func(nodeIndex int, nodeAddr string, partitionID uint64, extentID uint64, offset int64, size uint32) {
-			request := repl.NewExtentStripeRead(partitionID, extentID, offset, size)
-			defer func() {
-				parityNodeWaitGroup.Done()
-			}()
-
-			ep.doRead(request, nodeIndex, nodeAddr, dataMap)
-		}(i, nodeAddr, partitionID, extentID, offset, size)
-	}
-
-	dataNodeWaitGroup.Wait()
-
-	validDataCount := 0
-	fullDataBytes := make([][]byte, 0)
-	for i := 0; i < int(ep.dataNodeNum); i++ {
-		value, ok := dataMap.Load(i)
-		if !ok {
-			fullDataBytes[i] = nil
-		} else {
-			packet := value.(repl.Packet)
-			fullDataBytes[i] = packet.Data
-			validDataCount += 1
-		}
-	}
-
-	if validDataCount == int(ep.dataNodeNum) {
-		return joinBytes(fullDataBytes), nil
-	}
-
-	parityNodeWaitGroup.Wait()
-	nextIndex := len(fullDataBytes)
-	for i := 0; i < int(ep.parityNodeNum); i++ {
-		value, ok := parityMap.Load(i)
-		if !ok {
-			fullDataBytes[nextIndex+i] = nil
-		} else {
-			packet := value.(repl.Packet)
-			fullDataBytes[nextIndex+i] = packet.Data
-			validDataCount += 1
-		}
-	}
-
-	if validDataCount >= int(ep.dataNodeNum) {
-		return ep.reconstructData(fullDataBytes, ep.dataNodeNum)
-	} else {
-		return []byte{}, errors.New("no enough data for reconstruct")
-	}
-}
-
-func joinBytes(pBytes [][]byte) []byte {
-	sep := []byte("")
-	return bytes.Join(pBytes, sep)
-}
-
-func (ep *EcPartition) reconstructData(pBytes [][]byte, len uint32) ([]byte, error) {
-	coder, err := codecnode.NewEcCoder(int(ep.stripeUnitSize), int(ep.dataNodeNum), int(ep.parityNodeNum))
-	if err != nil {
-		return []byte{}, errors.New(fmt.Sprintf("NewEcCoder error:%s", err))
-	}
-
-	err = coder.Reconstruct(pBytes)
-	if err != nil {
-		return []byte{}, errors.New(fmt.Sprintf("reconstruct data error:%s", err))
-	}
-
-	// TODO liuchengyu write back data
-	return joinBytes(pBytes[0:len]), nil
-}
-
-func (ep *EcPartition) doRead(request *repl.Packet, nodeIndex int, nodeAddr string, dataMap *sync.Map) {
-	conn, err := net.Dial("tcp", nodeAddr)
-	if err != nil {
-		return
-	}
-	defer func() {
-		err = conn.Close()
-		if err != nil {
-			log.LogErrorf("close tcp connection fail, host(%v) error(%v)", nodeAddr, err)
-		}
-	}()
-
-	err = request.WriteToConn(conn)
-	if err != nil {
-		err = errors.New(fmt.Sprintf("ExtentStripeRead to host(%v) error(%v)", nodeAddr, err))
-		log.LogWarnf("action[streamRepairExtent] err(%v).", err)
-		return
-	}
-
-	err = request.ReadFromConn(conn, proto.ReadDeadlineTime) // read the response
-	if err != nil {
-		err = errors.New(fmt.Sprintf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v)", request.PartitionID,
-			nodeAddr, err))
-		return
-	}
-	if request.ResultCode != proto.OpOk {
-		err = errors.New(fmt.Sprintf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v) resultCode(%v)",
-			request.PartitionID, nodeAddr, err, request.ResultCode))
-		return
-	}
-
-	dataMap.Store(nodeIndex, request)
+func (ep *EcPartition) GetNewExtentId() (uint64, error) {
+	return ep.extentStore.NextExtentID()
 }

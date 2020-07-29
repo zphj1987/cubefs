@@ -313,7 +313,7 @@ func (d *Disk) AddSize(size uint64) {
 // AttachEcPartition adds a partition to the partition map.
 func (d *Disk) AttachEcPartition(ep *EcPartition) {
 	d.Lock()
-	d.partitionMap[ep.partitionID] = ep
+	d.partitionMap[ep.PartitionID] = ep
 	d.Unlock()
 
 	d.computeUsage()

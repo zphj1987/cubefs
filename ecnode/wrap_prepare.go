@@ -34,6 +34,7 @@ func (e *EcNode) Prepare(p *repl.Packet) (err error) {
 	if p.IsMasterCommand() {
 		return
 	}
+
 	p.BeforeTp(e.clusterID)
 	err = e.checkCrc(p)
 	if err != nil {
@@ -79,25 +80,13 @@ func (e *EcNode) checkPartition(p *repl.Packet) (err error) {
 	return
 }
 
-func (e *EcNode) addExtentInfo(p *repl.Packet) error {
+func (e *EcNode) addExtentInfo(p *repl.Packet) (err error) {
 	partition := p.Object.(*EcPartition)
-	store := p.Object.(*EcPartition).ExtentStore()
-	var (
-		extentID uint64
-		err      error
-	)
-	if p.IsLeaderPacket() && p.IsWriteOperation() {
-		p.ExtentID = extentID
-	} else if p.IsLeaderPacket() && p.IsCreateExtentOperation() {
+	if p.IsCreateExtentOperation() {
 		if partition.GetExtentCount() >= storage.MaxExtentCount*3 {
 			return fmt.Errorf("addExtentInfo partition %v has reached maxExtentId", p.PartitionID)
 		}
-		p.ExtentID, err = store.NextExtentID()
-		if err != nil {
-			return fmt.Errorf("addExtentInfo partition %v alloc NextExtentId error %v", p.PartitionID, err)
-		}
 	}
 	p.OrgBuffer = p.Data
-
 	return nil
 }

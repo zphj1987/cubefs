@@ -127,9 +127,9 @@ func (manager *SpaceManager) LoadDisk(path string, reservedSpace uint64, maxErrC
 		manager.partitionMutex.Lock()
 		defer manager.partitionMutex.Unlock()
 
-		if _, has := manager.partitions[ep.partitionID]; !has {
-			manager.partitions[ep.partitionID] = ep
-			log.LogDebugf("action[LoadDisk] put partition(%v) to manager manager.", ep.partitionID)
+		if _, has := manager.partitions[ep.PartitionID]; !has {
+			manager.partitions[ep.PartitionID] = ep
+			log.LogDebugf("action[LoadDisk] put partition(%v) to manager manager.", ep.PartitionID)
 		}
 	}
 
@@ -178,7 +178,7 @@ func (manager *SpaceManager) AttachPartition(ep *EcPartition) {
 	manager.partitionMutex.Lock()
 	defer manager.partitionMutex.Unlock()
 
-	manager.partitions[ep.partitionID] = ep
+	manager.partitions[ep.PartitionID] = ep
 }
 
 func (manager *SpaceManager) updateMetrics() {
@@ -241,15 +241,15 @@ func (e *EcNode) buildHeartbeatResponse(response *proto.EcNodeHeartbeatResponse)
 	space := e.space
 	space.RangePartitions(func(partition *EcPartition) bool {
 		vr := &proto.EcPartitionReport{
-			VolName:         partition.volumeID,
-			PartitionID:     uint64(partition.partitionID),
+			VolName:         partition.VolumeID,
+			PartitionID:     partition.PartitionID,
 			PartitionStatus: partition.Status(),
-			Total:           uint64(partition.Size()),
-			Used:            uint64(partition.Used()),
+			Total:           partition.Size(),
+			Used:            partition.Used(),
 			DiskPath:        partition.Disk().Path,
 			ExtentCount:     partition.GetExtentCount(),
 			NeedCompare:     true,
-			NodeIndex:       partition.nodeIndex,
+			NodeIndex:       partition.NodeIndex,
 		}
 		response.PartitionReports = append(response.PartitionReports, vr)
 		return true
@@ -330,22 +330,19 @@ func (manager *SpaceManager) CreatePartition(request *proto.CreateEcPartitionReq
 	manager.partitionMutex.Lock()
 	defer manager.partitionMutex.Unlock()
 
-	epCfg := &EcPartitionCfg{
-		ClusterID: manager.clusterID,
-
-		VolName:        request.VolumeID,
+	md := &EcPartitionMetaData{
 		PartitionID:    request.PartitionID,
-		PartitionSize:  int(request.PartitionSize),
-		StripeUnitSize: int(request.StripeUnitSize),
-
-		DataNodeNum:   request.DataNodeNum,
-		ParityNodeNum: request.ParityNodeNum,
-		NodeIndex:     request.NodeIndex,
-		DataNodes:     request.Hosts,
-		ParityNodes:   request.Hosts,
+		PartitionSize:  request.PartitionSize,
+		VolumeID:       request.VolumeID,
+		StripeUnitSize: request.StripeUnitSize,
+		DataNodeNum:    request.DataNodeNum,
+		ParityNodeNum:  request.ParityNodeNum,
+		NodeIndex:      request.NodeIndex,
+		Hosts:          request.Hosts,
+		CreateTime:     time.Now().Format(TimeLayout),
 	}
 
-	ep = manager.partitions[epCfg.PartitionID]
+	ep = manager.partitions[md.PartitionID]
 	if ep != nil {
 		return
 	}
@@ -356,11 +353,11 @@ func (manager *SpaceManager) CreatePartition(request *proto.CreateEcPartitionReq
 		return nil, err
 	}
 
-	ep, err = CreateEcPartition(epCfg, disk, request)
+	ep, err = CreateEcPartition(md, disk)
 	if err != nil {
 		return
 	}
-	manager.partitions[epCfg.PartitionID] = ep
+	manager.partitions[md.PartitionID] = ep
 	return
 }
 
