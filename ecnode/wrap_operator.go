@@ -86,6 +86,7 @@ func (e *EcNode) handlePacketToCreateEcPartition(p *repl.Packet) {
 		ep  *EcPartition
 	)
 
+	log.LogDebugf("CreateEcPartition:%v", string(p.Data))
 	task := &proto.AdminTask{}
 	err = json.Unmarshal(p.Data, task)
 	if err != nil {
@@ -122,14 +123,11 @@ func (e *EcNode) handlePacketToCreateEcPartition(p *repl.Packet) {
 
 // Handle OpHeartbeat packet
 func (e *EcNode) handleHeartbeatPacket(p *repl.Packet) {
-	log.LogDebugf("ActionRecieveEcHeartbeat")
-
 	task := &proto.AdminTask{}
 	err := json.Unmarshal(p.Data, task)
-
 	defer func() {
 		if err != nil {
-			p.PackErrorBody("ActionCreateEcPartition", err.Error())
+			p.PackErrorBody(ActionHeartbeat, err.Error())
 		} else {
 			p.PacketOkReply()
 		}
@@ -169,7 +167,7 @@ func (e *EcNode) handlePacketToCreateExtent(p *repl.Packet) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.PackErrorBody("ActionCreateExtent", err.Error())
+			p.PackErrorBody(ActionCreateExtent, err.Error())
 		} else {
 			p.PacketOkReply()
 		}
@@ -218,7 +216,7 @@ func (e *EcNode) handleWritePacket(p *repl.Packet) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.PackErrorBody("ActionWrite", err.Error())
+			p.PackErrorBody(ActionWrite, err.Error())
 		} else {
 			p.PacketOkReply()
 		}
@@ -226,7 +224,6 @@ func (e *EcNode) handleWritePacket(p *repl.Packet) {
 
 	partition := p.Object.(*EcPartition)
 	if partition.Available() <= 0 || partition.disk.Status == proto.ReadOnly || partition.IsRejectWrite() {
-
 		err = storage.NoSpaceError
 		return
 	} else if partition.disk.Status == proto.Unavailable {
@@ -235,10 +232,9 @@ func (e *EcNode) handleWritePacket(p *repl.Packet) {
 	}
 
 	store := partition.ExtentStore()
-
 	// we only allow write by one stripe unit
-	if uint64(p.Size) != partition.StripeUnitSize {
-		err = errors.New("invalid EC(erasure code) strip unit size")
+	if uint64(p.Size)%partition.StripeUnitSize != 0 && uint64(p.Size) > partition.ExtentFileSize {
+		err = errors.New("invalid size, must be in range (StripeUnitSize, ExtentFileSize)")
 		return
 	}
 
@@ -273,8 +269,9 @@ func (e *EcNode) handleStreamReadPacket(p *repl.Packet, connect net.Conn) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.PackErrorBody("ActionStreamRead", err.Error())
-			p.WriteToConn(connect)
+			p.PackErrorBody(ActionStreamRead, err.Error())
+		} else {
+			p.PacketOkReply()
 		}
 	}()
 
@@ -309,77 +306,47 @@ func (e *EcNode) handleStreamReadPacket(p *repl.Packet, connect net.Conn) {
 }
 
 func (e *EcNode) handleReadPacket(p *repl.Packet, conn *net.TCPConn) {
-	var (
-		err error
-	)
+	var err error
 	defer func() {
 		if err != nil {
 			p.PackErrorBody(ActionRead, err.Error())
-			p.WriteToConn(conn)
+		} else {
+			p.PacketOkReply()
 		}
 	}()
 
+	tpObject := exporter.NewTPCnt(p.GetOpMsg())
 	partition := p.Object.(*EcPartition)
-	needReplySize := p.Size
-	offset := p.ExtentOffset
 	store := partition.extentStore
-
-	for {
-		if needReplySize <= 0 {
-			break
-		}
-		err = nil
-		reply := repl.NewStreamReadResponsePacket(p.ReqID, p.PartitionID, p.ExtentID)
-		reply.StartT = p.StartT
-		currReadSize := uint32(util.Min(int(needReplySize), util.ReadBlockSize))
-		if currReadSize == util.ReadBlockSize {
-			reply.Data, _ = proto.Buffers.Get(util.ReadBlockSize)
-		} else {
-			reply.Data = make([]byte, currReadSize)
-		}
-		tpObject := exporter.NewTPCnt(p.GetOpMsg())
-		reply.ExtentOffset = offset
-		p.Size = uint32(currReadSize)
-		p.ExtentOffset = offset
-		reply.CRC, err = store.Read(reply.ExtentID, offset, int64(currReadSize), reply.Data, false)
-		partition.checkIsDiskError(err)
-		tpObject.Set(err)
-		p.CRC = reply.CRC
-		if err != nil {
-			return
-		}
-		reply.Size = uint32(currReadSize)
-		reply.ResultCode = proto.OpOk
-		reply.Opcode = p.Opcode
-		p.ResultCode = proto.OpOk
-		if err = reply.WriteToConn(conn); err != nil {
-			return
-		}
-		needReplySize -= currReadSize
-		offset += int64(currReadSize)
-		if currReadSize == util.ReadBlockSize {
-			proto.Buffers.Put(reply.Data)
-		}
-		logContent := fmt.Sprintf("action[operatePacket] %v.",
-			reply.LogMessage(reply.GetOpMsg(), conn.RemoteAddr().String(), reply.StartT, err))
-		log.LogReadf(logContent)
+	if store == nil {
+		err = proto.ErrNoAvailEcPartition
+		return
 	}
-	p.PacketOkReply()
 
-	return
+	p.CRC, err = store.Read(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, false)
+	partition.checkIsDiskError(err)
+	tpObject.Set(err)
 }
 
 func (e *EcNode) handelListExtentAndUpdatePartition(p *repl.Packet, conn *net.TCPConn) {
+	var err error
+	defer func() {
+		if err != nil {
+			p.PackErrorBody("handelChangeMember", err.Error())
+		} else {
+			p.PacketOkReply()
+		}
+	}()
 
 }
 
 func (e *EcNode) handelChangeMember(p *repl.Packet) {
-	var (
-		err error
-	)
+	var err error
 	defer func() {
 		if err != nil {
-			p.PackErrorBody(ActionRead, err.Error())
+			p.PackErrorBody("handelChangeMember", err.Error())
+		} else {
+			p.PacketOkReply()
 		}
 	}()
 

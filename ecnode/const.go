@@ -1,5 +1,11 @@
 package ecnode
 
+// Action description
 const (
-	ActionRead = "ActionRead"
+	ActionHeartbeat = "ActionHeartbeat"
+	ActionCreateEcPartition = "ActionCreateEcPartition"
+	ActionCreateExtent      = "ActionCreateExtent"
+	ActionRead              = "ActionRead"
+	ActionWrite             = "ActionWrite"
+	ActionStreamRead        = "ActionStreamRead"
 )
