@@ -329,7 +329,7 @@ func (ecdp *EcDataPartition) createTaskToCreateEcDataPartition(addr string, ecPa
 		nodeIndex = uint32(index)
 	}
 	task = proto.NewAdminTask(proto.OpCreateEcDataPartition, addr, newCreateEcPartitionRequest(
-		ecdp.VolName, ecdp.PartitionID, 16, 12, ecPartitionSize, uint32(ecdp.DataUnitsNum), uint32(ecdp.ParityUnitsNum), nodeIndex, hosts))
+		ecdp.VolName, ecdp.PartitionID, ecdp.StripeUnitSize, ecdp.ExtentFileSize, ecPartitionSize, uint32(ecdp.DataUnitsNum), uint32(ecdp.ParityUnitsNum), nodeIndex, hosts))
 	ecdp.resetTaskID(task)
 	return
 }
