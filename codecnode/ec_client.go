@@ -50,6 +50,11 @@ func (c *EcClient) CreateExtentsForWrite(pid uint64, size uint64) (extents []uin
 		return
 	}
 
+	if ecp.ExtentFileSize == 0 || ecp.DataUnitsNum == 0 {
+		err = errors.New("invalid partition args")
+		return
+	}
+
 	extentNum := (size - 1) / uint64(ecp.ExtentFileSize * uint32(ecp.DataUnitsNum)) + 1
 
 	var conn *net.TCPConn
