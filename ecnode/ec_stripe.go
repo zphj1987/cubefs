@@ -121,7 +121,7 @@ func (ep *EcPartition) reconstructData(pBytes [][]byte, len uint32) ([]byte, err
 }
 
 func (ep *EcPartition) doRead(request *repl.Packet, nodeIndex int, nodeAddr string, dataMap *sync.Map) {
-	err := DoRequest(request, nodeAddr)
+	err := DoRequest(request, nodeAddr, proto.ReadDeadlineTime)
 	if err != nil {
 		log.LogErrorf("Stripe RemoteRead EcPartition(%v) from host(%v) error(%v)", request.PartitionID,
 			nodeAddr, err)

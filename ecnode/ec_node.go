@@ -1,6 +1,7 @@
 package ecnode
 
 import (
+	"fmt"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/util/log"
@@ -26,7 +27,7 @@ func (e *EcNode) createExtentOnFollower(ep *EcPartition, extentId uint64) bool {
 				}
 			} else {
 				request := NewCreateExtent(ep.PartitionID, extentId)
-				err := DoRequest(request, addr)
+				err := DoRequest(request, addr, proto.ReadDeadlineTime)
 				if err != nil {
 					log.LogErrorf("NewCreateExtent error:%v addr:%v, partition:%d, extentId:%d",
 						err, addr, ep.PartitionID, extentId)
@@ -45,6 +46,7 @@ func (e *EcNode) createExtentOnFollower(ep *EcPartition, extentId uint64) bool {
 	}
 
 	wg.Wait()
+	fmt.Printf("master->ecnode createExtent[%v], success count:%d node total count:%d\n", extentId, count, len(ep.Hosts))
 	log.LogDebugf("master->ecnode createExtent[%v], success count:%d node total count:%d", extentId, count, len(ep.Hosts))
 	if int(count) == len(ep.Hosts) {
 		return true

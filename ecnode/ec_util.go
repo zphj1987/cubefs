@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/util/log"
 	"net"
 	"net/http"
 )
 
-func DoRequest(request *repl.Packet, addr string) (err error) {
+func DoRequest(request *repl.Packet, addr string, timeoutSec int) (err error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return
@@ -30,7 +29,7 @@ func DoRequest(request *repl.Packet, addr string) (err error) {
 		return
 	}
 
-	err = request.ReadFromConn(conn, proto.ReadDeadlineTime) // read the response
+	err = request.ReadFromConn(conn, timeoutSec) // read the response
 	if err != nil {
 		err = errors.New(fmt.Sprintf("read from host(%v) error(%v)", addr, err))
 		return

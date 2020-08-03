@@ -335,6 +335,7 @@ func (manager *SpaceManager) CreatePartition(request *proto.CreateEcPartitionReq
 		PartitionSize:  request.PartitionSize,
 		VolumeID:       request.VolumeID,
 		StripeUnitSize: request.StripeUnitSize,
+		ExtentFileSize: request.ExtentFileSize,
 		DataNodeNum:    request.DataNodeNum,
 		ParityNodeNum:  request.ParityNodeNum,
 		NodeIndex:      request.NodeIndex,
@@ -349,7 +350,7 @@ func (manager *SpaceManager) CreatePartition(request *proto.CreateEcPartitionReq
 
 	disk := manager.getMinUsageDisk()
 	if disk == nil {
-		err = errors.New("No disk space to create a data partition")
+		err = errors.New("no disk space to create a data partition")
 		return nil, err
 	}
 

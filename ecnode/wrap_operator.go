@@ -305,7 +305,7 @@ func (e *EcNode) handleStreamReadPacket(p *repl.Packet, connect net.Conn) {
 	}
 }
 
-func (e *EcNode) handleReadPacket(p *repl.Packet, conn *net.TCPConn) {
+func (e *EcNode) handleReadPacket(p *repl.Packet, c *net.TCPConn) {
 	var err error
 	defer func() {
 		if err != nil {
@@ -323,9 +323,27 @@ func (e *EcNode) handleReadPacket(p *repl.Packet, conn *net.TCPConn) {
 		return
 	}
 
-	p.CRC, err = store.Read(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, false)
+	// we only allow write by one stripe unit
+	if p.Size == 0 || uint64(p.Size) != partition.StripeUnitSize {
+		err = errors.New("invalid read size, must be equals StripeUnitSize")
+		return
+	}
+
+	reply := repl.NewExtentStripeRead(p.PartitionID, p.ExtentID, p.ExtentOffset, p.Size)
+	reply.Data = make([]byte, p.Size)
+	reply.CRC, err = store.Read(reply.ExtentID, reply.ExtentOffset, int64(reply.Size), reply.Data, false)
 	partition.checkIsDiskError(err)
 	tpObject.Set(err)
+	if err != nil {
+		return
+	}
+
+	reply.ResultCode = proto.OpOk
+	if err = reply.WriteToConn(c); err != nil {
+		return
+	}
+
+	p.CRC = reply.CRC
 }
 
 func (e *EcNode) handelListExtentAndUpdatePartition(p *repl.Packet, conn *net.TCPConn) {

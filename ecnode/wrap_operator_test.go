@@ -1,76 +1,127 @@
 package ecnode
 
 import (
+	"fmt"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"net"
+	"os"
 	"testing"
 	"time"
 )
 
-func TestEcNode_CreatePartition(t *testing.T) {
-	e := fakeEcNode(t)
-	ep := e.fakeCreateECPartition(t, fakePartitionID)
-	fakeStartAllEcNode(t, e, ep, fakeCreateExtentPacketHandle)
+func TestEcNode_CreateExtent(t *testing.T) {
+	// clean data
+	defer os.RemoveAll(testBasePath)
 
-	fakeCreateExtent(e, t, fakePartitionID, fakeExtentId)
+	e := newFakeEcNode(t, nil)
+	ep := e.fakeCreateECPartition(t, fakePartitionID)
+	e.fakeCreateExtent(ep, t)
 }
 
-func fakeCreateExtent(e *EcNode, t *testing.T, partitionId, extentId uint64) {
+func TestEcNode_handleWritePacket(t *testing.T) {
+	// clean data
+	defer os.RemoveAll(testBasePath)
+
+	e := newFakeEcNode(t, nil)
+	ep := e.fakeCreateECPartition(t, fakePartitionID)
+	e.fakeCreateExtent(ep, t)
+
+	size := int(ep.StripeUnitSize)
+	data := make([]byte, size)
+	for i := 0; i < size; i++ {
+		data[i] = 0
+	}
+
 	p := &repl.Packet{
+		Object: ep,
 		Packet: proto.Packet{
 			Magic:       proto.ProtoMagic,
 			ReqID:       proto.GenerateRequestID(),
-			Opcode:      proto.OpCreateExtent,
-			PartitionID: partitionId,
+			Opcode:      proto.OpWrite,
+			PartitionID: fakePartitionID,
+			ExtentID:    fakeExtentId,
+			Size:        uint32(size),
+			Data:        data,
 			StartT:      time.Now().UnixNano(),
-			ExtentID:    extentId,
 		},
 	}
 
-	err := e.Prepare(p)
-	if err != nil {
-		t.Errorf("Prepare() error = %v", err)
+	e.handleWritePacket(p)
+
+	if p.ResultCode != proto.OpOk {
+		t.Fatalf("handleWritePacket fail, error msg:%v", p.GetResultMsg())
+	}
+}
+
+func TestEcNode_handleReadPacket(t *testing.T) {
+	// clean data
+	defer os.RemoveAll(testBasePath)
+
+	e := newFakeEcNode(t, calcDataMd5)
+	ep := e.fakeCreateECPartition(t, fakePartitionID)
+	e.fakeCreateExtent(ep, t)
+
+	beforeMd5 := e.prepareTestData(t, ep)
+	fmt.Println("beforeMd5", beforeMd5)
+
+	// read
+	p := &repl.Packet{
+		Object: ep,
+		Packet: proto.Packet{
+			Magic:       proto.ProtoMagic,
+			ReqID:       proto.GenerateRequestID(),
+			Opcode:      proto.OpRead,
+			PartitionID: fakePartitionID,
+			ExtentID:    fakeExtentId,
+			Size:        uint32(ep.StripeUnitSize),
+			StartT:      time.Now().UnixNano(),
+		},
 	}
 
-	conn, err := net.Dial("tcp", ":3000")
+	conn, err := net.Dial("tcp", e.Hosts[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	defer conn.Close()
-	err = e.OperatePacket(p, conn.(*net.TCPConn))
-	if err != nil {
-		t.Errorf("OperatePacket() error = %v", err)
+	fmt.Println(fmt.Sprintf("%v", e.space.diskList))
+	e.handleReadPacket(p, conn.(*net.TCPConn))
+
+	if p.ResultCode != proto.OpOk {
+		t.Fatalf("handleReadPacket fail, error msg:%v", p.GetResultMsg())
 	}
 
-	err = e.Post(p)
-	if err != nil {
-		t.Errorf("Post() error = %v", err)
+	afterMd5 := e.ResultMap[e.Hosts[0]]
+	fmt.Println("afterMd5", afterMd5)
+	if beforeMd5 != afterMd5 {
+		t.Fatalf("handleReadPacket md5 is not same")
 	}
-}
-
-func TestEcNode_handleReadPacket(t *testing.T) {
-	e := fakeEcNode(t)
-	ep := e.fakeCreateECPartition(t, fakePartitionID)
-	fakeStartAllEcNode(t, e, ep, nil)
-
 }
 
 func TestEcNode_handleStreamReadPacket(t *testing.T) {
-	e := fakeEcNode(t)
+	// clean data
+	defer os.RemoveAll(testBasePath)
+
+	e := newFakeEcNode(t, nil)
 	ep := e.fakeCreateECPartition(t, fakePartitionID)
-	fakeStartAllEcNode(t, e, ep, nil)
+	beforeMd5 := e.prepareTestData(t, ep)
+	fmt.Println("beforeMd5", beforeMd5)
+
 }
 
 func TestEcNode_handelChangeMember(t *testing.T) {
-	e := fakeEcNode(t)
-	ep := e.fakeCreateECPartition(t, fakePartitionID)
-	fakeStartAllEcNode(t, e, ep, nil)
+	// clean data
+	defer os.RemoveAll(testBasePath)
+
+	e := newFakeEcNode(t, nil)
+	_ = e.fakeCreateECPartition(t, fakePartitionID)
 
 	//e.handelChangeMember()
 }
 
 func TestEcNode_handelListExtensInpartition(t *testing.T) {
+	// clean data
+	defer os.RemoveAll(testBasePath)
 
 }
