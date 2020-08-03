@@ -163,6 +163,35 @@ func (w *Wrapper) updateDataPartition(isInit bool) (err error) {
 		}
 	}
 
+	// update ec partition
+	var evp *proto.EcPartitionsView
+	if evp, err = w.mc.ClientAPI().GetEcPartitions(w.volName); err != nil {
+		log.LogErrorf("updateEcPartition: get ec partitions fail: volume(%v) err(%v)", w.volName, err)
+		return
+	}
+	log.LogInfof("updateEcPartition: get ec partitions: volume(%v) partitions(%v)", w.volName, len(evp.EcPartitions))
+
+	var convertEP = func(response *proto.EcPartitionResponse) *DataPartition {
+		dataPartitionResponse := &proto.DataPartitionResponse{
+			PartitionID: response.PartitionID,
+			Status:      response.Status,
+			ReplicaNum:  response.ReplicaNum,
+			Hosts:       response.Hosts,
+			LeaderAddr:  response.LeaderAddr,
+		}
+
+		return &DataPartition{
+			DataPartitionResponse: *dataPartitionResponse,
+			ClientWrapper:         w,
+		}
+	}
+
+	for _, partition := range evp.EcPartitions {
+		ep := convertEP(partition)
+		log.LogInfof("updateEcPartition: ep(%v)", ep)
+		w.replaceOrInsertPartition(ep)
+	}
+
 	// isInit used to identify whether this call is caused by mount action
 	if isInit || (len(rwPartitionGroups) >= MinWriteAbleDataPartitionCnt) {
 		w.rwPartition = rwPartitionGroups
