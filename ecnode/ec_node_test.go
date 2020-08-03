@@ -1,13 +1,13 @@
 package ecnode
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/util"
 	"github.com/chubaofs/chubaofs/util/config"
+	"hash/crc32"
 	"net"
 	"os"
 	"sync"
@@ -17,7 +17,8 @@ import (
 
 const (
 	fakePartitionID = 1
-	testBasePath    = "/tmp/cfs"
+	//testBasePath    = "/tmp/cfs"
+	testBasePath = "/Users/liuchengyu/cfs"
 	testDiskPath = testBasePath + "/disk"
 	fakeExtentId = 1001
 )
@@ -26,11 +27,11 @@ type fakeHandler func(e *fakeEcNode, p *repl.Packet, conn net.Conn)
 
 type fakeEcNode struct {
 	EcNode
-	Hosts     []string
-	ResultMap map[string]string
+	Hosts []string
 }
 
 func TestEcNode_handlePacketToCreateExtent(t *testing.T) {
+
 	// clean data
 	defer os.RemoveAll(testBasePath)
 	e := newFakeEcNode(t, fakeCreateExtentPacketHandle)
@@ -88,7 +89,6 @@ func newFakeEcNode(t *testing.T, handler fakeHandler) *fakeEcNode {
 			"127.0.0.1:17314",
 			"127.0.0.1:17315",
 		},
-		ResultMap: make(map[string]string),
 	}
 
 	wg := sync.WaitGroup{}
@@ -243,16 +243,14 @@ func (e *fakeEcNode) fakeServiceHandler(handler fakeHandler, conn net.Conn, t *t
 	}
 }
 
-func (e *fakeEcNode) prepareTestData(t *testing.T, ep *EcPartition) string {
+func (e *fakeEcNode) prepareTestData(t *testing.T, ep *EcPartition) uint32 {
 	size := int(ep.StripeUnitSize)
 	data := make([]byte, size)
 	for i := 0; i < size; i++ {
 		data[i] = 0
 	}
 
-	hash := md5.Sum(data)
-	md5str := fmt.Sprintf("%x", hash)
-
+	crc := crc32.ChecksumIEEE(data)
 	p := &repl.Packet{
 		Object: ep,
 		Packet: proto.Packet{
@@ -262,6 +260,7 @@ func (e *fakeEcNode) prepareTestData(t *testing.T, ep *EcPartition) string {
 			PartitionID: ep.PartitionID,
 			ExtentID:    fakeExtentId,
 			Size:        uint32(size),
+			CRC:         crc,
 			Data:        data,
 			StartT:      time.Now().UnixNano(),
 		},
@@ -273,7 +272,7 @@ func (e *fakeEcNode) prepareTestData(t *testing.T, ep *EcPartition) string {
 		t.Fatalf("prepareTestData fail, error msg:%v", p.GetResultMsg())
 	}
 
-	return md5str
+	return crc
 }
 
 func fakeCreateExtentPacketHandle(e *fakeEcNode, request *repl.Packet, conn net.Conn) {
@@ -281,11 +280,12 @@ func fakeCreateExtentPacketHandle(e *fakeEcNode, request *repl.Packet, conn net.
 	request.ResultCode = proto.OpOk
 }
 
-func calcDataMd5(e *fakeEcNode, request *repl.Packet, conn net.Conn) {
-	fmt.Println(request.Size)
-	if request.Data != nil {
-		hash := md5.Sum(request.Data)
-		md5str := fmt.Sprintf("%x", hash)
-		e.ResultMap[conn.LocalAddr().String()] = md5str
+func fakeStreamReadDataHandler(e *fakeEcNode, request *repl.Packet, conn net.Conn) {
+	request.Data = make([]byte, request.Size)
+	for i := 0; i < int(request.Size); i++ {
+		request.Data[i] = 0
 	}
+
+	request.CRC = crc32.ChecksumIEEE(request.Data)
+	request.ResultCode = proto.OpOk
 }

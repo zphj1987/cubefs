@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/util/log"
 	"net"
@@ -36,6 +37,19 @@ func DoRequest(request *repl.Packet, addr string, timeoutSec int) (err error) {
 	}
 
 	return
+}
+
+func NewReadReply(packet *repl.Packet) *repl.Packet {
+	p := repl.NewPacket()
+	p.Opcode = packet.Opcode
+	p.ReqID = packet.ReqID
+	p.PartitionID = packet.PartitionID
+	p.ExtentID = packet.ExtentID
+	p.Size = packet.Size
+	p.ExtentOffset = packet.ExtentOffset
+	p.KernelOffset = packet.KernelOffset
+	p.ExtentType = proto.NormalExtentType
+	return p
 }
 
 func Response(w http.ResponseWriter, code int, data interface{}, msg string) (err error) {

@@ -69,6 +69,8 @@ func (e *EcNode) OperatePacket(p *repl.Packet, c *net.TCPConn) (err error) {
 		e.handleReadPacket(p, c)
 	case proto.OpStreamRead:
 		e.handleStreamReadPacket(p, c)
+	case proto.OpStreamFollowerRead:
+		e.handleStreamReadPacket(p, c)
 	case proto.OpChangeEcPartitionMembers:
 		e.handelChangeMember(p)
 	case proto.OpListExtentsInPartition:
@@ -269,40 +271,60 @@ func (e *EcNode) handleStreamReadPacket(p *repl.Packet, connect net.Conn) {
 	var err error
 	defer func() {
 		if err != nil {
+			log.LogErrorf("StreamRead fail, err:%v", err)
 			p.PackErrorBody(ActionStreamRead, err.Error())
-		} else {
-			p.PacketOkReply()
+			err = p.WriteToConn(connect)
+			if err != nil {
+				log.LogDebugf("StreamRead write to client fail, packet:%v err:%v", p, err)
+			}
 		}
 	}()
 
 	ep := p.Object.(*EcPartition)
-	needReplySize := p.Size
-	// stripeSize is just data size, not contains parity
-	stripeIndex := int(uint64(p.ExtentOffset) % (uint64(ep.DataNodeNum+ep.ParityNodeNum) * ep.StripeUnitSize))
-	curOffset := int64(ep.StripeUnitSize) * int64(stripeIndex)
 
+	ecExtent := NewEcExtent(e, ep, p.ExtentID)
+	readSize := uint64(p.Size)
+	extentOffset := uint64(p.ExtentOffset)
 	for {
-		if needReplySize == 0 {
+		if readSize <= 0 {
 			break
 		}
 
-		currReadSize := uint32(util.Min(int(needReplySize), util.ReadBlockSize))
-		p.Data, err = ep.readFromEcNode(p.PartitionID, p.ExtentID, curOffset, currReadSize, stripeIndex)
+		nodeAddr := ecExtent.calcNode(extentOffset)
+		extentFileOffset := ecExtent.calcExtentFileOffset(extentOffset)
+		curReadSize := ecExtent.calcCanReadSize(extentOffset, readSize)
+		data, crc, err := ecExtent.readStripeData(nodeAddr, extentFileOffset, curReadSize)
+		log.LogDebugf("StreamRead readStripeData: %v %v %v %v %v %v", nodeAddr, extentFileOffset, curReadSize, len(data), crc, err)
 		if err != nil {
+			data, err = ecExtent.reconstructStripeData(nodeAddr, extentFileOffset, curReadSize)
+			if err != nil {
+				err = errors.NewErrorf("StreamRead reconstruct Stripe Data fail, ReqID(%v) PartitionID(%v) ExtentID(%v) ExtentOffset(%v) Size(%v) nodeAddr(%v) extentFileOffset(%v) curReadSize(%v) err:%v",
+					p.ReqID, p.PartitionID, p.ExtentID, p.ExtentOffset, p.Size, nodeAddr, extentFileOffset, curReadSize, err)
+				return
+			}
+
+			crc = crc32.ChecksumIEEE(data)
+		}
+
+		reply := NewReadReply(p)
+		reply.ExtentOffset = int64(extentOffset)
+		reply.Data = data
+		reply.Size = uint32(curReadSize)
+		reply.CRC = crc
+		reply.ResultCode = proto.OpOk
+		if err = reply.WriteToConn(connect); err != nil {
+			msg := fmt.Sprintf("StreamRead write to client fail. ReqID(%v) PartitionID(%v) ExtentID(%v) ExtentOffset[%v] Size[%v] err:%v",
+				reply.ReqID, reply.PartitionID, reply.ExtentID, reply.ExtentOffset, reply.Size, err)
+			err = errors.New(msg)
 			return
 		}
 
-		p.CRC = crc32.ChecksumIEEE(p.Data)
-		p.ResultCode = proto.OpOk
-		if err = p.WriteToConn(connect); err != nil {
-			return
-		}
-
-		needReplySize -= currReadSize
-		curOffset += int64(currReadSize) * int64(ep.StripeUnitSize)
-		logContent := fmt.Sprintf("action[operatePacket] %v.", p.LogMessage(p.GetOpMsg(), connect.RemoteAddr().String(), p.StartT, err))
-		log.LogReadf(logContent)
+		log.LogDebugf("StreamRead reply packet:%v ExtentOffset[%v] Size[%v] Crc[%v]", reply, reply.ExtentOffset, reply.Size, reply.CRC)
+		extentOffset += curReadSize
+		readSize -= curReadSize
 	}
+
+	p.PacketOkReply()
 }
 
 func (e *EcNode) handleReadPacket(p *repl.Packet, c *net.TCPConn) {
@@ -310,40 +332,37 @@ func (e *EcNode) handleReadPacket(p *repl.Packet, c *net.TCPConn) {
 	defer func() {
 		if err != nil {
 			p.PackErrorBody(ActionRead, err.Error())
-		} else {
-			p.PacketOkReply()
+			err = p.WriteToConn(c)
+			if err != nil {
+				log.LogDebugf("StreamRead write to client fail, packet:%v err:%v", p, err)
+			}
 		}
 	}()
 
-	tpObject := exporter.NewTPCnt(p.GetOpMsg())
+	packet := NewReadReply(p)
 	partition := p.Object.(*EcPartition)
-	store := partition.extentStore
-	if store == nil {
-		err = proto.ErrNoAvailEcPartition
-		return
-	}
-
-	// we only allow write by one stripe unit
-	if p.Size == 0 || uint64(p.Size) != partition.StripeUnitSize {
+	// only allow write by one stripe unit
+	if p.Size == 0 || uint64(p.Size) > partition.StripeUnitSize {
 		err = errors.New("invalid read size, must be equals StripeUnitSize")
 		return
 	}
 
-	reply := repl.NewExtentStripeRead(p.PartitionID, p.ExtentID, p.ExtentOffset, p.Size)
-	reply.Data = make([]byte, p.Size)
-	reply.CRC, err = store.Read(reply.ExtentID, reply.ExtentOffset, int64(reply.Size), reply.Data, false)
+	packet.Data = make([]byte, p.Size)
+	tpObject := exporter.NewTPCnt(p.GetOpMsg())
+	extent := NewEcExtent(e, partition, packet.ExtentID)
+	packet.CRC, err = extent.readExtentFile(uint64(packet.ExtentOffset), uint64(packet.Size), packet.Data)
 	partition.checkIsDiskError(err)
 	tpObject.Set(err)
-	if err != nil {
-		return
+	if err == nil {
+		packet.ResultCode = proto.OpOk
+		err = packet.WriteToConn(c)
+		if err != nil {
+			log.LogErrorf("Read write to client fail. packet:%v err:%v", packet, err)
+		}
 	}
 
-	reply.ResultCode = proto.OpOk
-	if err = reply.WriteToConn(c); err != nil {
-		return
-	}
-
-	p.CRC = reply.CRC
+	p.PacketOkReply()
+	log.LogDebugf("Read reply packet:%v ExtentOffset[%v] Size[%v] Crc[%v], err:%v", p, p.ExtentOffset, p.Size, p.CRC, err)
 }
 
 func (e *EcNode) handelListExtentAndUpdatePartition(p *repl.Packet, conn *net.TCPConn) {

@@ -58,13 +58,11 @@ func TestEcNode_handleReadPacket(t *testing.T) {
 	// clean data
 	defer os.RemoveAll(testBasePath)
 
-	e := newFakeEcNode(t, calcDataMd5)
+	e := newFakeEcNode(t, nil)
 	ep := e.fakeCreateECPartition(t, fakePartitionID)
 	e.fakeCreateExtent(ep, t)
 
-	beforeMd5 := e.prepareTestData(t, ep)
-	fmt.Println("beforeMd5", beforeMd5)
-
+	beforeCrc := e.prepareTestData(t, ep)
 	// read
 	p := &repl.Packet{
 		Object: ep,
@@ -85,17 +83,13 @@ func TestEcNode_handleReadPacket(t *testing.T) {
 	}
 
 	defer conn.Close()
-	fmt.Println(fmt.Sprintf("%v", e.space.diskList))
 	e.handleReadPacket(p, conn.(*net.TCPConn))
-
 	if p.ResultCode != proto.OpOk {
 		t.Fatalf("handleReadPacket fail, error msg:%v", p.GetResultMsg())
 	}
 
-	afterMd5 := e.ResultMap[e.Hosts[0]]
-	fmt.Println("afterMd5", afterMd5)
-	if beforeMd5 != afterMd5 {
-		t.Fatalf("handleReadPacket md5 is not same")
+	if p.Size != 0 && p.CRC != beforeCrc {
+		t.Fatalf("handleReadPacket crc is not same")
 	}
 }
 
@@ -103,11 +97,35 @@ func TestEcNode_handleStreamReadPacket(t *testing.T) {
 	// clean data
 	defer os.RemoveAll(testBasePath)
 
-	e := newFakeEcNode(t, nil)
+	e := newFakeEcNode(t, fakeStreamReadDataHandler)
 	ep := e.fakeCreateECPartition(t, fakePartitionID)
-	beforeMd5 := e.prepareTestData(t, ep)
-	fmt.Println("beforeMd5", beforeMd5)
+	e.fakeCreateExtent(ep, t)
 
+	_ = e.prepareTestData(t, ep)
+	// read
+	p := &repl.Packet{
+		Object: ep,
+		Packet: proto.Packet{
+			Magic:       proto.ProtoMagic,
+			ReqID:       proto.GenerateRequestID(),
+			Opcode:      proto.OpStreamRead,
+			PartitionID: fakePartitionID,
+			ExtentID:    fakeExtentId,
+			Size:        512,
+			StartT:      time.Now().UnixNano(),
+		},
+	}
+
+	conn, err := net.Dial("tcp", e.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer conn.Close()
+	e.handleStreamReadPacket(p, conn.(*net.TCPConn))
+	if p.ResultCode != proto.OpOk {
+		t.Fatalf("handleReadPacket fail, error msg:%v", p.GetResultMsg())
+	}
 }
 
 func TestEcNode_handelChangeMember(t *testing.T) {
@@ -124,4 +142,12 @@ func TestEcNode_handelListExtensInpartition(t *testing.T) {
 	// clean data
 	defer os.RemoveAll(testBasePath)
 
+}
+
+func TestCalc(t *testing.T)  {
+
+	i := uint64(258)
+	k := uint64(64)
+	y := uint(i/k)
+	fmt.Println(y)
 }

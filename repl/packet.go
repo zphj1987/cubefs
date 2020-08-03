@@ -270,13 +270,13 @@ func NewPacketToNotifyExtentRepair(partitionID uint64) (p *Packet) {
 	return
 }
 
-func NewExtentStripeRead(partitionID uint64, extentID uint64, offset int64, size uint32) (p *Packet) {
+func NewExtentStripeRead(partitionID uint64, extentID uint64, offset uint64, size uint64) (p *Packet) {
 	p = new(Packet)
 	p.ExtentID = extentID
 	p.PartitionID = partitionID
 	p.Magic = proto.ProtoMagic
-	p.ExtentOffset = offset
-	p.Size = size
+	p.ExtentOffset = int64(offset)
+	p.Size = uint32(size)
 	p.Opcode = proto.OpRead
 	p.ReqID = proto.GenerateRequestID()
 	p.StartT = time.Now().UnixNano()

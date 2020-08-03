@@ -21,22 +21,16 @@ func (e *EcNode) createExtentOnFollower(ep *EcPartition, extentId uint64) bool {
 			if addr == e.localServerAddr {
 				// create extent locally
 				if err := ep.ExtentStore().Create(extentId); err != nil {
-					log.LogErrorf("NewCreateExtent locally error:%v addr:%v, partition:%d, extentId:%d",
-						err, addr, ep.PartitionID, extentId)
+					log.LogErrorf("NewCreateExtent locally addr:%v partition:%d extentId:%d error:%v",
+						addr, ep.PartitionID, extentId, err)
 					return
 				}
 			} else {
 				request := NewCreateExtent(ep.PartitionID, extentId)
 				err := DoRequest(request, addr, proto.ReadDeadlineTime)
-				if err != nil {
-					log.LogErrorf("NewCreateExtent error:%v addr:%v, partition:%d, extentId:%d",
-						err, addr, ep.PartitionID, extentId)
-					return
-				}
-
-				if request.ResultCode != proto.OpOk {
-					log.LogErrorf("NewCreateExtent fail. addr:%v, partition:%d, extentId:%d",
-						addr, ep.PartitionID, extentId)
+				if err != nil || request.ResultCode != proto.OpOk {
+					log.LogErrorf("NewCreateExtent addr:%v partition:%d extentId:%d error:%v ",
+						addr, ep.PartitionID, extentId, err)
 					return
 				}
 			}
