@@ -183,6 +183,7 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 				return
 			}
 			size, _, _ := ec.FileSize(inode)
+			log.LogDebug("FileSize: " + strconv.FormatInt(int64(size), 10))
 
 			pid, err := ecl.GetPartitionIdForWrite()
 			if err != nil {

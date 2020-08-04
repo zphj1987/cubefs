@@ -157,7 +157,7 @@ func (c *EcClient) Write(data [][]byte, eid, pid uint64) (err error) {
 			count++
 			mtx.Unlock()
 
-		}(data[i], h)
+		}(data[(i + len(ecp.Hosts) - int(eid) % len(ecp.Hosts)) % len(ecp.Hosts)], h)
 	}
 	wg.Wait()
 
