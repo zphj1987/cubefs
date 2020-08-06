@@ -355,6 +355,7 @@ func (e *EcNode) handleReadPacket(p *repl.Packet, c *net.TCPConn) {
 	tpObject.Set(err)
 	if err == nil {
 		packet.ResultCode = proto.OpOk
+		log.LogDebugf("Read reply packet:%v ExtentOffset[%v] Size[%v] Crc[%v], err:%v", packet, packet.ExtentOffset, packet.Size, packet.CRC, err)
 		err = packet.WriteToConn(c)
 		if err != nil {
 			log.LogErrorf("Read write to client fail. packet:%v err:%v", packet, err)
@@ -362,7 +363,6 @@ func (e *EcNode) handleReadPacket(p *repl.Packet, c *net.TCPConn) {
 	}
 
 	p.PacketOkReply()
-	log.LogDebugf("Read reply packet:%v ExtentOffset[%v] Size[%v] Crc[%v], err:%v", p, p.ExtentOffset, p.Size, p.CRC, err)
 }
 
 func (e *EcNode) handelListExtentAndUpdatePartition(p *repl.Packet, conn *net.TCPConn) {
