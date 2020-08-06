@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/util"
+	"github.com/chubaofs/chubaofs/util/log"
 	"github.com/chubaofs/chubaofs/util/errors"
 )
 
@@ -97,7 +98,7 @@ func (c *EcClient) GetPartitionInfo(pid uint64) (dataNum, parityNum, extentSize,
 	return
 }
 
-func (c *EcClient) Write(data [][]byte, eid, pid uint64) (err error) {
+func (c *EcClient) Write(data [][]byte, nStripe uint32, eid, pid uint64) (err error) {
 	var ecp *EcPartition
 	if ecp, err = c.wrapper.GetEcPartition(pid); err != nil {
 		return
@@ -129,7 +130,8 @@ func (c *EcClient) Write(data [][]byte, eid, pid uint64) (err error) {
 			}
 			defer gConnPool.PutConnect(conn, true)
 
-			for offset := uint32(0); int(offset) < len(block); offset = offset + ecp.StripeUnitSize {
+			for offset := uint32(0); int(offset) < len(block) && offset < nStripe * ecp.StripeUnitSize;
+				offset = offset + ecp.StripeUnitSize {
 				p := proto.NewPacketReqID()
 				p.Opcode = proto.OpWrite
 				p.Data = block[offset : offset + ecp.StripeUnitSize]
@@ -138,6 +140,9 @@ func (c *EcClient) Write(data [][]byte, eid, pid uint64) (err error) {
 				p.PartitionID = pid
 				p.ExtentID = eid
 				p.CRC = crc32.ChecksumIEEE(p.Data)
+
+				log.LogDebugf("WriteToEcNode(%v): ReqID(%x), Offset(%v), Size(%v), PartitionID(%v), ExtentID(%v), CRC(%x)",
+					host, p.ReqID, p.ExtentOffset, p.Size, p.PartitionID, p.ExtentID, p.CRC)
 
 				if err = p.WriteToConn(conn); err != nil {
 					return

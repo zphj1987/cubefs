@@ -195,10 +195,8 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 			if err != nil {
 				return
 			}
-			log.LogDebug("dataNum: " + strconv.FormatUint(uint64(dataNum), 10) +
-				", parityNum: " + strconv.FormatUint(uint64(parityNum), 10) +
-				", extentSize: " + strconv.FormatUint(uint64(extentSize), 10) +
-				", stripeSize: " + strconv.FormatUint(uint64(stripeSize), 10))
+			log.LogDebugf("PartitionInfo: dataNum(%v), parityNum(%v), extentSize(%v), stripeSize(%v)",
+				dataNum, parityNum, extentSize, stripeSize)
 
 			ech, err := NewEcHandler(int(stripeSize), int(dataNum), int(parityNum))
 			if err != nil {
@@ -219,6 +217,7 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 			for i := 0; i < int(dataNum + parityNum); i++ {
 				outbufs[i] = make([]byte, extentSize)
 			}
+			zerobuf := make([]byte, stripeSize)
 
 			extentKeys = make([]proto.ExtentKey, len(extents))
 
@@ -232,7 +231,12 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 				if n, err = ec.Read(inode, inbuf, offset, n); err != nil {
 					return
 				}
-				for i := uint32(0); i < extentSize; i += stripeSize {
+				if (n < len(inbuf)) {
+					copy(inbuf[n:len(inbuf)], zerobuf)
+				}
+
+
+				for i := uint32(0); i < extentSize && i < uint32(n); i += stripeSize {
 					var shards [][]byte
 					if shards, err = ech.Encode(inbuf[i * dataNum : (i + stripeSize) * dataNum]); err != nil {
 						return
@@ -241,7 +245,7 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 						copy(outbufs[j][i:i+stripeSize], shard)
 					}
 				}
-				if err = ecl.Write(outbufs, eid, pid); err != nil {
+				if err = ecl.Write(outbufs, uint32(n - 1) / (stripeSize * dataNum) + 1, eid, pid); err != nil {
 					return
 				}
 
