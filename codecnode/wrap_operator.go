@@ -212,12 +212,10 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 				log.LogDebug("CreateExtents: " + string(b))
 			}
 
-			inbuf := make([]byte, extentSize * dataNum)
 			outbufs := make([][]byte, dataNum + parityNum)
 			for i := 0; i < int(dataNum + parityNum); i++ {
 				outbufs[i] = make([]byte, extentSize)
 			}
-			zerobuf := make([]byte, stripeSize)
 
 			extentKeys = make([]proto.ExtentKey, len(extents))
 
@@ -228,24 +226,24 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 					n = size - offset
 				}
 
+				nStripe := uint32(n - 1) / (stripeSize * dataNum) + 1
+
+				inbuf := make([]byte, stripeSize * dataNum * nStripe)
+
 				if n, err = ec.Read(inode, inbuf, offset, n); err != nil {
 					return
 				}
-				if (n < len(inbuf)) {
-					copy(inbuf[n:len(inbuf)], zerobuf)
-				}
 
-
-				for i := uint32(0); i < extentSize && i < uint32(n); i += stripeSize {
+				for i := uint32(0); i < nStripe; i++ {
 					var shards [][]byte
-					if shards, err = ech.Encode(inbuf[i * dataNum : (i + stripeSize) * dataNum]); err != nil {
+					if shards, err = ech.Encode(inbuf[stripeSize * dataNum * i : stripeSize * dataNum * (i + 1)]); err != nil {
 						return
 					}
 					for j, shard := range shards {
-						copy(outbufs[j][i:i+stripeSize], shard)
+						copy(outbufs[j][stripeSize * i : stripeSize * (i + 1)], shard)
 					}
 				}
-				if err = ecl.Write(outbufs, uint32(n - 1) / (stripeSize * dataNum) + 1, eid, pid); err != nil {
+				if err = ecl.Write(outbufs, nStripe, eid, pid); err != nil {
 					return
 				}
 
