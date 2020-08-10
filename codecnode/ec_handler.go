@@ -56,6 +56,12 @@ func (ech *EcHandler) Encode(data []byte) (shards [][]byte, err error) {
 
 	enc := ech.encoder
 
+	if cap(data) > len(data) {
+		data_tmp := make([]byte, len(data))
+		copy(data_tmp, data)
+		data = data_tmp
+	}
+
 	var shards_tmp [][]byte
 	if shards_tmp, err = enc.Split(data); err != nil {
 		return

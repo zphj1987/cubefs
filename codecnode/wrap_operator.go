@@ -229,7 +229,6 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 				nStripe := uint32(n - 1) / (stripeSize * dataNum) + 1
 
 				inbuf := make([]byte, stripeSize * dataNum * nStripe)
-				ecbuf := make([]byte, stripeSize * dataNum)
 
 				if n, err = ec.Read(inode, inbuf, offset, n); err != nil {
 					return
@@ -237,8 +236,7 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 
 				for i := uint32(0); i < nStripe; i++ {
 					var shards [][]byte
-					copy(ecbuf, inbuf[stripeSize * dataNum * i : stripeSize * dataNum * (i + 1)])
-					if shards, err = ech.Encode(ecbuf); err != nil {
+					if shards, err = ech.Encode(inbuf[stripeSize * dataNum * i : stripeSize * dataNum * (i + 1)]); err != nil {
 						return
 					}
 					for j, shard := range shards {
