@@ -93,6 +93,8 @@ type DataNode struct {
 	tcpListener net.Listener
 	stopC       chan bool
 
+	metrics *DataNodeMetrics
+
 	control common.Control
 }
 
@@ -130,6 +132,7 @@ func doStart(server common.Server, cfg *config.Config) (err error) {
 	}
 
 	exporter.Init(ModuleName, cfg)
+	s.registerMetrics()
 	s.register(cfg)
 
 	// start the raft server

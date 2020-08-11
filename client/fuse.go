@@ -18,7 +18,6 @@ package main
 // Usage: ./client -c fuse.json &
 //
 // Default mountpoint is specified in fuse.json, which is "/mnt".
-//
 
 import (
 	"flag"
@@ -181,7 +180,10 @@ func main() {
 	}
 	defer fsConn.Close()
 
-	exporter.RegistConsul(super.ClusterName(), ModuleName, cfg)
+	if exporter.IsEnabled() {
+		exporter.RegistConsul(super.ClusterName(), ModuleName, cfg)
+		cfs.RegisterMetrics()
+	}
 
 	if err = fs.Serve(fsConn, super); err != nil {
 		log.LogFlush()

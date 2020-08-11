@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"github.com/chubaofs/chubaofs/proto"
-	"github.com/chubaofs/chubaofs/util/exporter"
 	"github.com/chubaofs/chubaofs/util/log"
 )
 
@@ -167,8 +166,10 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 
 	start := time.Now()
 
-	metric := exporter.NewTPCnt("fileread")
-	defer metric.Set(err)
+	if metrics != nil {
+		m := metrics.MetricFuseOpTpc.GetWithLabelVals("fileread")
+		defer m.CountWithError(err)
+	}
 
 	size, err := f.super.ec.Read(f.info.Inode, resp.Data[fuse.OutHeaderSize:], int(req.Offset), req.Size)
 	if err != nil && err != io.EOF {
@@ -228,8 +229,10 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 	enSyncWrite = f.super.enSyncWrite
 	start := time.Now()
 
-	metric := exporter.NewTPCnt("filewrite")
-	defer metric.Set(err)
+	if metrics != nil {
+		m := metrics.MetricFuseOpTpc.GetWithLabelVals("filewrite")
+		defer m.CountWithError(err)
+	}
 
 	size, err := f.super.ec.Write(ino, int(req.Offset), req.Data, enSyncWrite)
 	if err != nil {
@@ -268,8 +271,10 @@ func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
 	log.LogDebugf("TRACE Flush enter: ino(%v)", f.info.Inode)
 	start := time.Now()
 
-	metric := exporter.NewTPCnt("filesync")
-	defer metric.Set(err)
+	if metrics != nil {
+		m := metrics.MetricFuseOpTpc.GetWithLabelVals("filesync")
+		defer m.CountWithError(err)
+	}
 
 	err = f.super.ec.Flush(f.info.Inode)
 	if err != nil {

@@ -19,27 +19,69 @@ import (
 	"testing"
 )
 
-func TestNewCounter(t *testing.T) {
+//func TestNewCounter(t *testing.T) {
+//    N := 100
+//    exitCh := make(chan int64, N)
+//    for i := 0; i < N; i++ {
+//        go func(i int64) {
+//            name := fmt.Sprintf("name_%d_gauge", i%2)
+//            label := fmt.Sprintf("label-%d:name", i)
+//            m := NewCounter(name)
+//            if m != nil {
+//                m.SetWithLabels(i, map[string]string{"volname": label, "cluster": name})
+//                t.Logf("metric: %v", m.name)
+//            }
+//            name2 := fmt.Sprintf("name_%d_counter", i%2)
+//            c := NewGauge(name2)
+//            if c != nil {
+//                //c.Set(float64(i))
+//                c.SetWithLabels(i, map[string]string{"volname": label, "cluster": name})
+//                t.Logf("metric: %v", name2)
+//            }
+//            exitCh <- i
+
+//        }(int64(i))
+//    }
+
+//    x := 0
+//    select {
+//    case <-exitCh:
+//        x += 1
+//        if x == N {
+//            return
+//        }
+//    }
+//}
+
+func TestNewTPCntVec(t *testing.T) {
+	tpv := NewTPVec("tpv1", "", []string{})
+	if tpv == nil {
+		t.Logf("tpv is nil ")
+	}
+	t.Logf("tpv is ok ")
+
 	N := 100
+	m1 := NewTPCntVec("metric_tpcnt_vec", "", []string{"count"})
+	if m1 == nil {
+		t.Logf("tpcv is nil ")
+	}
+	t.Logf("tpcv: %p, %p", m1, m1.tpv)
 	exitCh := make(chan int64, N)
 	for i := 0; i < N; i++ {
 		go func(i int64) {
-			name := fmt.Sprintf("name_%d_gauge", i%2)
-			label := fmt.Sprintf("label-%d:name", i)
-			m := NewCounter(name)
-			if m != nil {
-				m.SetWithLabels(i, map[string]string{"volname": label, "cluster": name})
-				t.Logf("metric: %v", m.name)
+			if m1 == nil {
+				t.Logf("tpcv go is nil ")
 			}
-			name2 := fmt.Sprintf("name_%d_counter", i%2)
-			c := NewGauge(name2)
-			if c != nil {
-				//c.Set(float64(i))
-				c.SetWithLabels(i, map[string]string{"volname": label, "cluster": name})
-				t.Logf("metric: %v", name2)
+			t.Logf("tpcv go1: %p, %p, %p", m1, m1.tpv, m1.cntv)
+			m := m1.GetWithLabelVals([]string{fmt.Sprintf("%d", i)})
+			t.Logf("tpcv go2: %p, %p, %p", m1, m1.tpv, m1.cntv)
+			if m != nil {
+				t.Logf("tpcv go3: %p, %p, %p", m1, m1.tpv, m1.cntv)
+				m.Count()
+				t.Logf("tpcv go1: %p, %p, %p")
+				//t.Logf("metric: %v", m.tp.metric.Desc().String())
 			}
 			exitCh <- i
-
 		}(int64(i))
 	}
 

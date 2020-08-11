@@ -17,13 +17,6 @@ package metanode
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/chubaofs/chubaofs/cmd/common"
-	"github.com/chubaofs/chubaofs/proto"
-	"github.com/chubaofs/chubaofs/raftstore"
-	"github.com/chubaofs/chubaofs/util"
-	"github.com/chubaofs/chubaofs/util/errors"
-	"github.com/chubaofs/chubaofs/util/exporter"
-	"github.com/chubaofs/chubaofs/util/log"
 	"io/ioutil"
 	"net"
 	_ "net/http/pprof"
@@ -34,6 +27,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/chubaofs/chubaofs/cmd/common"
+	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/raftstore"
+	"github.com/chubaofs/chubaofs/util"
+	"github.com/chubaofs/chubaofs/util/errors"
+	"github.com/chubaofs/chubaofs/util/log"
 )
 
 const partitionPrefix = "partition_"
@@ -69,11 +69,28 @@ type metadataManager struct {
 	flDeleteBatchCount atomic.Value
 }
 
+func (m *metadataManager) getPacketLabelVals(p *Packet) (labels []string) {
+	labels = make([]string, 3)
+	mp, err := m.getPartition(p.PartitionID)
+	if err != nil {
+		log.LogErrorf("[metaManager] getPacketLabels metric packet: %v, partitions: %v", p, m.partitions)
+		return
+	}
+
+	labels[0] = mp.GetBaseConfig().VolName
+	labels[1] = fmt.Sprintf("%d", p.PartitionID)
+	labels[2] = p.GetOpMsg()
+
+	return
+}
+
 // HandleMetadataOperation handles the metadata operations.
-func (m *metadataManager) HandleMetadataOperation(conn net.Conn, p *Packet,
-	remoteAddr string) (err error) {
-	metric := exporter.NewTPCnt(p.GetOpMsg())
-	defer metric.Set(err)
+func (m *metadataManager) HandleMetadataOperation(conn net.Conn, p *Packet, remoteAddr string) (err error) {
+	if m.metaNode.metrics != nil {
+		labelVals := m.getPacketLabelVals(p)
+		metric := m.metaNode.metrics.MpOp.GetWithLabelVals(labelVals...)
+		defer metric.CountWithError(err)
+	}
 
 	switch p.Opcode {
 	case proto.OpMetaCreateInode:
