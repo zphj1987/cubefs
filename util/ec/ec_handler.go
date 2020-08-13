@@ -1,4 +1,4 @@
-package codecnode
+package ec
 
 import (
 	"github.com/chubaofs/chubaofs/util/errors"

@@ -29,6 +29,8 @@ import (
 
 	"github.com/chubaofs/chubaofs/sdk/meta"
 	"github.com/chubaofs/chubaofs/sdk/data/stream"
+
+	echandler "github.com/chubaofs/chubaofs/util/ec"
 )
 
 func (s *CodecServer) OperatePacket(p *repl.Packet, c *net.TCPConn) (err error) {
@@ -198,7 +200,7 @@ func (s *CodecServer) handleEcMigrationTask(p *repl.Packet, c *net.TCPConn) {
 			log.LogDebugf("PartitionInfo: dataNum(%v), parityNum(%v), extentSize(%v), stripeSize(%v)",
 				dataNum, parityNum, extentSize, stripeSize)
 
-			ech, err := NewEcHandler(int(stripeSize), int(dataNum), int(parityNum))
+			ech, err := echandler.NewEcHandler(int(stripeSize), int(dataNum), int(parityNum))
 			if err != nil {
 				return
 			}

@@ -3,7 +3,7 @@ package ecnode
 import (
 	"errors"
 	"fmt"
-	"github.com/chubaofs/chubaofs/codecnode"
+	"github.com/chubaofs/chubaofs/util/ec"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/repl"
 	"github.com/chubaofs/chubaofs/util/log"
@@ -202,7 +202,7 @@ func (ee *ecExtent) readStripeFromFollower(extentFileOffset uint64) [][]byte {
 
 func (ee *ecExtent) reconstructData(pBytes [][]byte) error {
 	ep := ee.ep
-	coder, err := codecnode.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
+	coder, err := ec.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
 	if err != nil {
 		return errors.New(fmt.Sprintf("NewEcCoder error:%s", err))
 	}
