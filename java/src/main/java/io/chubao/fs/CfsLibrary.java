@@ -1,3 +1,17 @@
+// Copyright 2020 The Chubao Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 package io.chubao.fs;
 
 import com.sun.jna.Library;
@@ -8,7 +22,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public interface CfsLibrary extends Library {
-    public class StatInfo extends Structure implements Structure.ByReference {
+    class StatInfo extends Structure implements Structure.ByReference {
         // note that the field layout should be aligned with cfs_stat_info
         public long ino;
         public long size;
@@ -27,15 +41,20 @@ public interface CfsLibrary extends Library {
 
         public StatInfo() {
             super();
-        };
+        }
 
         @Override
         protected List<String> getFieldOrder() {
-            return Arrays.asList(new String[] { "ino", "size", "blocks", "atime", "mtime", "ctime", "atime_nsec",
-                    "mtime_nsec", "ctime_nsec", "mode", "nlink", "blkSize", "uid", "gid" });
+            return Arrays.asList("ino", "size", "blocks", "atime", "mtime", "ctime", "atime_nsec",
+                    "mtime_nsec", "ctime_nsec", "mode", "nlink", "blkSize", "uid", "gid");
         }
-        public static class ByReference extends StatInfo implements Structure.ByReference {}
-        public static class ByValue extends StatInfo implements Structure.ByValue {}
+
+        public static class ByReference extends StatInfo implements Structure.ByReference {
+        }
+
+        public static class ByValue extends StatInfo implements Structure.ByValue {
+        }
+
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("inodeid:");
@@ -63,7 +82,7 @@ public interface CfsLibrary extends Library {
 
     }
 
-    public class Dirent extends Structure {
+    class Dirent extends Structure {
         // note that the field layout should be aligned with cfs_dirent
         public long ino;
         public byte dType;
@@ -72,22 +91,27 @@ public interface CfsLibrary extends Library {
 
         public Dirent() {
             super();
-        };
+        }
 
         @Override
         protected List<String> getFieldOrder() {
-            return Arrays.asList(new String[] { "ino", "dType", "nameLen", "name" });
+            return Arrays.asList("ino", "dType", "nameLen", "name");
         }
-        public static class ByReference extends Dirent implements Structure.ByReference {}
-        public static class ByValue extends Dirent implements Structure.ByValue {}
+
+        public static class ByReference extends Dirent implements Structure.ByReference {
+        }
+
+        public static class ByValue extends Dirent implements Structure.ByValue {
+        }
 
     }
 
-    public class DirentArray extends Structure {
+    class DirentArray extends Structure {
         public static class ByValue extends DirentArray implements Structure.ByValue {
         }
 
-        public static class ByReference extends DirentArray implements Structure.ByReference {}
+        public static class ByReference extends DirentArray implements Structure.ByReference {
+        }
 
         // note that the field layout should be aligned with GoSlice
         public Pointer data;
@@ -99,7 +123,7 @@ public interface CfsLibrary extends Library {
         }
 
         protected List<String> getFieldOrder() {
-            return Arrays.asList(new String[] { "data", "len", "cap" });
+            return Arrays.asList("data", "len", "cap");
         }
     }
 
@@ -129,16 +153,23 @@ public interface CfsLibrary extends Library {
     long cfs_write(long id, int fd, byte[] buf, long size, long offset);
 
     long cfs_read(long id, int fd, byte[] buf, long size, long offset);
+
     int cfs_mkdirs(long cid, String path, int mode, int uid, int gid);
+
     int cfs_unlink(long cid, String path);
+
     int cfs_rename(long cid, String from, String to);
 
     int cfs_readdir(long id, int fd, DirentArray.ByValue dents, long count);
 
     int cfs_fchmod(long id, int fd, int mode);
+
     int cfs_rmdir(long cid, String path, boolean recursive);
+
     int cfs_batch_get_inodes(long cid, int fd, long[] iids, DirentArray.ByValue stats, int count);
+
     int cfs_setattr_by_path(long cid, String path, StatInfo info, int valid);
+
     long cfs_file_size(long cid, int fd);
 
 }

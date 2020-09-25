@@ -102,7 +102,7 @@ public class TestCfsClient {
             int total_entry = 0;
             Dirent dent = new Dirent();
             Dirent[] dents = (Dirent[]) dent.toArray(2);
-            for (;;) {
+            for (; ; ) {
                 int n = mnt.Readdir(fd, dents, 2);
                 if (n <= 0) {
                     break;
