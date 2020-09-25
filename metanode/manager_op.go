@@ -1273,3 +1273,27 @@ func (m *metadataManager) opMetaBatchCompleteMigrate(conn net.Conn, p *Packet, r
 		remoteAddr, p.GetReqID(), req, p.GetResultMsg(), p.Data)
 	return
 }
+
+func (m *metadataManager) opMetaBatchMigrate(conn net.Conn, p *Packet, remoteAddr string) (err error) {
+	req := &proto.BatchMigrateRequest{}
+	if err = json.Unmarshal(p.Data, req); err != nil {
+		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+		_ = m.respondToClient(conn, p)
+		return
+	}
+	mp, err := m.getPartition(req.PartitionId)
+	if err != nil {
+		p.PacketErrorWithBody(proto.OpNotExistErr, []byte(err.Error()))
+		_ = m.respondToClient(conn, p)
+		return
+	}
+	if !m.serveProxy(conn, mp, p) {
+		return
+	}
+	err = mp.BatchMigrate(req, p)
+	_ = m.respondToClient(conn, p)
+	log.LogDebugf("%s [opMetaBatchMigrate] req: %d - %v, resp: %v, body: %s",
+		remoteAddr, p.GetReqID(), req, p.GetResultMsg(), p.Data)
+	return
+}
+

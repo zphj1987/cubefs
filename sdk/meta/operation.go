@@ -1151,3 +1151,34 @@ func (mw *MetaWrapper) batchCompleteMigrate(mp *MetaPartition, inodes []proto.In
 	log.LogDebugf("batch update extent: packet(%v) mp(%v) req(%v) result(%v)", packet, mp, *req, packet.GetResultMsg())
 	return
 }
+
+func (mw *MetaWrapper) batchMigrate(mp *MetaPartition, inodes []uint64) (err error) {
+	req := &proto.BatchMigrateRequest{
+		VolName:     mw.volname,
+		PartitionId: mp.PartitionID,
+		Inodes:      inodes,
+	}
+	packet := proto.NewPacketReqID()
+	packet.Opcode = proto.OpMetaBatchMigrate
+	err = packet.MarshalData(req)
+	if err != nil {
+		log.LogErrorf("batchEcMigrate: err(%v)", err)
+		return
+	}
+
+	log.LogDebugf("batchEcMigrate enter: packet(%v) mp(%v) req(%v)", packet, mp, string(packet.Data))
+
+	packet, err = mw.sendToMetaPartition(mp, packet)
+	if err != nil {
+		log.LogErrorf("batchEcMigrate: packet(%v) mp(%v) req(%v) err(%v)", packet, mp, *req, err)
+		return
+	}
+
+	if parseStatus(packet.ResultCode) != statusOK {
+		log.LogErrorf("batchEcMigrate: packet(%v) mp(%v) req(%v) result(%v)", packet, mp, *req, packet.GetResultMsg())
+		return
+	}
+
+	log.LogDebugf("batchEcMigrate exit: packet(%v) mp(%v) req(%v) inos(%v)", packet, mp, *req, inodes)
+	return
+}

@@ -27,6 +27,7 @@ import (
 const (
 	DeleteMarkFlag = 1 << iota
 	MigratedMarkFlag
+	MigrateCompleteMarkFlag
 )
 
 // Inode wraps necessary properties of `Inode` information in the file system.
@@ -521,3 +522,16 @@ func (i *Inode) IsMigrated() bool {
 	defer i.RUnlock()
 	return i.Flag&MigratedMarkFlag == MigratedMarkFlag
 }
+
+func (i *Inode) SetMigrateCompleteMark() {
+	i.Lock()
+	i.Flag |= MigrateCompleteMarkFlag
+	i.Unlock()
+}
+
+func (i *Inode) IsMigrateCompleted() bool {
+	i.RLock()
+	defer i.RUnlock()
+	return i.Flag&MigrateCompleteMarkFlag == MigrateCompleteMarkFlag
+}
+

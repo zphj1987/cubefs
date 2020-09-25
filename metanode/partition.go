@@ -157,6 +157,10 @@ type OpMultipart interface {
 	ListMultipart(req *proto.ListMultipartRequest, p *Packet) (err error)
 }
 
+type OpEc interface {
+	BatchMigrate(req *proto.BatchMigrateRequest, p *Packet) (err error)
+}
+
 // OpMeta defines the interface for the metadata operations.
 type OpMeta interface {
 	OpInode
@@ -189,6 +193,7 @@ type MetaPartition interface {
 	Start() error
 	Stop()
 	OpMeta
+	OpEc
 }
 
 // metaPartition manages the range of the inode IDs.

@@ -41,3 +41,9 @@ type BatchCompleteMigrateRequest struct {
 	PartitionId uint64            `json:"pid"`
 	Inodes      []InodeExtentInfo `json:"inos"`
 }
+
+type BatchMigrateRequest struct {
+	VolName     string   `json:"vol"`
+	PartitionId uint64   `json:"pid"`
+	Inodes      []uint64 `json:"inos"`
+}

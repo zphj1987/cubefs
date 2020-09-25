@@ -82,6 +82,9 @@ type (
 	BatchEvictInodeReq = proto.BatchEvictInodeRequest
 	// Client -> MetaNode
 	SetattrRequest = proto.SetAttrRequest
+
+	// Client -> MetaNode
+	EcMigrationReq = proto.EcMigrationRequest
 )
 
 const (

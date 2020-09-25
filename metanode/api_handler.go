@@ -59,6 +59,8 @@ func (m *MetaNode) registerAPIHandler() (err error) {
 	http.HandleFunc("/getDirectory", m.getDirectoryHandler)
 	http.HandleFunc("/getAllDentry", m.getAllDentriesHandler)
 	http.HandleFunc("/getParams", m.getParamsHandler)
+
+	http.HandleFunc("/addEcTask", m.addEcTaskHandler)
 	return
 }
 
@@ -411,5 +413,64 @@ func (m *MetaNode) getDirectoryHandler(w http.ResponseWriter, r *http.Request) {
 	if len(p.Data) > 0 {
 		resp.Data = json.RawMessage(p.Data)
 	}
+	return
+}
+
+func (m *MetaNode) addEcTaskHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	resp := NewAPIResponse(http.StatusBadRequest, "")
+	defer func() {
+		data, _ := resp.Marshal()
+		if _, err := w.Write(data); err != nil {
+			log.LogErrorf("[addEcTaskHandler] response %s", err)
+		}
+	}()
+	pid, err := strconv.ParseUint(r.FormValue("pid"), 10, 64)
+	if err != nil {
+		resp.Msg = err.Error()
+		return
+	}
+	id, err := strconv.ParseUint(r.FormValue("ino"), 10, 64)
+	if err != nil {
+		resp.Msg = err.Error()
+		return
+	}
+	mp, err := m.metadataManager.GetPartition(pid)
+	if err != nil {
+		resp.Code = http.StatusNotFound
+		resp.Msg = err.Error()
+		return
+	}
+
+	p := &Packet{}
+
+	ig_req := &InodeGetReq{
+		PartitionID: pid,
+		Inode:       id,
+	}
+	err = mp.InodeGet(ig_req, p)
+	if err != nil {
+		resp.Code = http.StatusInternalServerError
+		resp.Msg = err.Error()
+		return
+	}
+
+
+	bm_req := &proto.BatchMigrateRequest{
+		PartitionId: pid,
+		Inodes:      []uint64{id},
+	}
+	err = mp.BatchMigrate(bm_req, p)
+	if err != nil {
+		resp.Code = http.StatusInternalServerError
+		resp.Msg = err.Error()
+		return
+	}
+	resp.Code = http.StatusSeeOther
+	resp.Msg = p.GetResultMsg()
+	if len(p.Data) > 0 {
+		resp.Data = json.RawMessage(p.Data)
+	}
+
 	return
 }

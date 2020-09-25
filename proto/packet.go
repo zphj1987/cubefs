@@ -146,6 +146,8 @@ const (
 	OpIssueMigrationTask uint8 = 0xA1
 	//Operations: CodecNode -> Meta
 	OpMetaBatchCompleteMigrate uint8 = 0xA2
+	//Operations: Client -> Meta
+	OpMetaBatchMigrate uint8 = 0xA3
 
 	//Operations: Master -> EcNode
 	OpEcNodeHeartbeat          uint8 = 0xB0

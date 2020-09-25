@@ -923,3 +923,21 @@ func (mw *MetaWrapper) UpdateExtentKeys(inode uint64, eks []proto.ExtentKey) err
 	}
 	return nil
 }
+
+func (mw *MetaWrapper) EcMigrate(parentID uint64, name string) error {
+	parentMP := mw.getPartitionByInode(parentID)
+	if parentMP == nil {
+		log.LogErrorf("EcMigrate: No parent partition, parentID(%v) name(%v)", parentID, name)
+		return syscall.ENOENT
+	}
+	status, inode, mode, err := mw.lookup(parentMP, parentID, name)
+	if err != nil || status != statusOK {
+		return statusToErrno(status)
+	}
+	mp := mw.getPartitionByInode(inode)
+	if proto.IsDir(mode) {
+		return nil
+	} else {
+		return mw.batchMigrate(mp, []uint64{inode})
+	}
+}

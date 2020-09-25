@@ -16,26 +16,67 @@ package metanode
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
+	"sync"
 
 	"github.com/chubaofs/chubaofs/proto"
+	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/sdk/codec"
 	"github.com/chubaofs/chubaofs/util/log"
 )
 
 const (
-	DefaultColdDataThreshold = 0               //time.Hour * 24 * 30
+	DefaultColdDataThreshold = -1              //time.Hour * 24 * 30
 	MigrationInterval        = time.Second * 5 //time.Hour
 	UpdateCodecInterval      = time.Second * 5 //time.Minute
+	MigrationTaskChanLen     = 1024
 )
 
+type MigrationTask struct {
+	inode   uint64
+}
+
 type MigrationManager struct {
-	cw *codec.CodecWrapper
+	sync.RWMutex
+
+	cw      *codec.CodecWrapper
+
+	cdt     int64 // ColdDataThreshold
+
+	taskC   chan *MigrationTask
+}
+
+func (mp *metaPartition) setColdDataThreshold(cdt int64) {
+	mm := mp.manager.metaNode.migrationManager
+	mm.Lock()
+	mm.cdt = cdt
+	mm.Unlock()
+	return
+}
+
+func (mp *metaPartition) getColdDataThreshold() int64 {
+	mm := mp.manager.metaNode.migrationManager
+	mm.RLock()
+	cdt := mm.cdt
+	mm.Unlock()
+	return cdt
+}
+
+func (mp *metaPartition) AddEcMigrationTask(inodes []uint64) (err error) {
+	log.LogInfof("add migration tasks [%v]", inodes)
+	// mm := mp.manager.metaNode.migrationManager
+	for _, inode := range inodes {
+		go mp.migration(inode)
+		// mm.taskC <- &MigrationTask{inode: inode}
+	}
+	return
 }
 
 func (mp *metaPartition) startMigrationTask() (err error) {
+	mm := mp.manager.metaNode.migrationManager
+	mm.cdt = DefaultColdDataThreshold
+	mm.taskC = make(chan *MigrationTask, MigrationTaskChanLen)
 	go func() {
 		ticket := time.NewTimer(MigrationInterval)
 
@@ -44,9 +85,12 @@ func (mp *metaPartition) startMigrationTask() (err error) {
 			case <-ticket.C:
 				_, ok := mp.IsLeader()
 				if ok {
-					go mp.migration()
+					go mp.autoMigration()
 					ticket.Reset(MigrationInterval)
 				}
+			case task := <-mm.taskC:
+				log.LogInfof("start migration task [%v]", task.inode)
+				go mp.migration(task.inode)
 			}
 		}
 	}()
@@ -54,15 +98,49 @@ func (mp *metaPartition) startMigrationTask() (err error) {
 	return
 }
 
-func (mp *metaPartition) migration() {
+func (mp *metaPartition) migration(inode uint64) (err error) {
+	defer func() {
+		if err != nil {
+			log.LogErrorf("migration falid [%v], inode[%v]", err, inode)
+		} else {
+			log.LogInfof("issue migration task [%v] success!", inode)
+		}
+	}()
+
+	ir := mp.getInode(NewInode(inode, 0))
+	if (ir.Status != proto.OpOk) {
+		log.LogErrorf("migration: get inode [%v] failed", inode)
+		err = errors.NewErrorf("inode not found")
+		return
+	}
+	ino := ir.Msg
+	ino.SetMigratedMark()
+
+	mm := mp.manager.metaNode.migrationManager
+
+	mm.cw.RLock()
+	codecNodes := mm.cw.CodecNodes
+	mm.cw.RUnlock()
+
+	if len(codecNodes) == 0 {
+		err = errors.New("No valid codecnode")
+		return
+	}
+
+	log.LogInfof("send migration task [%v]", inode)
+	err = mm.cw.BatchInodeMigration([]uint64{inode}, mp.config.PartitionId, mp.config.VolName, codecNodes[0].Addr)
+	return
+}
+
+func (mp *metaPartition) autoMigration() {
 	var err error
 	var inodes []uint64
 	defer func() {
 		if err != nil {
-			log.LogErrorf("migration falid [%v], inodes[%v]", err, inodes)
+			log.LogErrorf("auto migration falid [%v], inodes[%v]", err, inodes)
 		}
 		if len(inodes) != 0 {
-			log.LogErrorf("issue migration task [%v] success!", inodes)
+			log.LogInfof("issue auto migration task [%v] success!", inodes)
 		}
 	}()
 
@@ -91,17 +169,19 @@ func (mp *metaPartition) migration() {
 }
 
 func (mp *metaPartition) prepareMigrationTask() (inodes []uint64, err error) {
-	mp.inodeTree.Ascend(func(i BtreeItem) bool {
-		ino := i.(*Inode)
-		if (!proto.IsRegular(ino.Type)) || (ino.IsMigrated()) {
+	if cdt := mp.getColdDataThreshold(); cdt >= 0 {
+		mp.inodeTree.Ascend(func(i BtreeItem) bool {
+			ino := i.(*Inode)
+			if (!proto.IsRegular(ino.Type)) || (ino.IsMigrated()) {
+				return true
+			}
+			if int64(time.Since(time.Unix(ino.ModifyTime, 0))) > cdt {
+				inodes = append(inodes, ino.Inode)
+				ino.SetMigratedMark()
+			}
 			return true
-		}
-		if time.Since(time.Unix(ino.ModifyTime, 0)) > DefaultColdDataThreshold {
-			inodes = append(inodes, ino.Inode)
-			ino.SetMigratedMark()
-		}
-		return true
-	})
+		})
+	}
 
 	// valData := proto.IssueMigrationTaskRequest{
 	// 	VolName:     mp.config.VolName,

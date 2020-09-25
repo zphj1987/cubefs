@@ -23,7 +23,7 @@ type ecStripe struct {
 	paritySize      uint64
 	localServerAddr string
 	hosts           []string
-	coder           *codecnode.EcHandler
+	coder           *ec.EcHandler
 }
 
 func NewEcStripe(e *EcNode, ep *EcPartition, extentID uint64) (*ecStripe, error) {
@@ -39,7 +39,7 @@ func NewEcStripe(e *EcNode, ep *EcPartition, extentID uint64) (*ecStripe, error)
 		nodeIndex = nodeIndex + 1
 	}
 
-	coder, err := codecnode.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
+	coder, err := ec.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
 	if err != nil {
 		log.LogErrorf("NewEcCoder fail. err:%v", err)
 		return nil, errors.NewErrorf("NewEcCoder fail. err:%v", err)
@@ -273,7 +273,7 @@ func (ee *ecStripe) validate() (extentInfo *storage.ExtentInfo, err error) {
 		return
 	}
 
-	coder, err := codecnode.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
+	coder, err := ec.NewEcCoder(int(ep.StripeUnitSize), int(ep.DataNodeNum), int(ep.ParityNodeNum))
 	if err != nil || coder == nil {
 		err = fmt.Errorf("NewEcCoder fail, err:%v", err)
 		return

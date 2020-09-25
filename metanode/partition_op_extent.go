@@ -19,6 +19,7 @@ import (
 
 	"os"
 
+	"github.com/chubaofs/chubaofs/util/errors"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/util/log"
 )
@@ -121,6 +122,12 @@ func (mp *metaPartition) BatchExtentAppend(req *proto.AppendExtentKeysRequest, p
 
 func (mp *metaPartition) BatchCompleteMigrate(req *proto.BatchCompleteMigrateRequest, p *Packet) (err error) {
 	ino := NewInode(req.Inodes[0].Inode, 0)
+
+	if ino.IsMigrateCompleted() {
+		err = errors.NewErrorf("has been migrated")
+		return
+	}
+
 	extents := req.Inodes[0].Extents
 	for _, extent := range extents {
 		ino.Extents.Append(&proto.ExtentKey{
@@ -132,6 +139,7 @@ func (mp *metaPartition) BatchCompleteMigrate(req *proto.BatchCompleteMigrateReq
 			CRC:          extent.CRC,
 		})
 	}
+
 	val, err := ino.Marshal()
 	if err != nil {
 		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
@@ -144,7 +152,35 @@ func (mp *metaPartition) BatchCompleteMigrate(req *proto.BatchCompleteMigrateReq
 		p.PacketErrorWithBody(proto.OpAgain, []byte(err.Error()))
 		return
 	}
-	log.LogErrorf("BatchCompleteMigrate [%v] success", req)
+
+	ino.SetMigrateCompleteMark()
+
+	log.LogInfof("BatchCompleteMigrate [%v] success", req)
 	p.PacketErrorWithBody(resp.(uint8), nil)
+	return
+}
+
+func (mp *metaPartition) BatchMigrate(req *proto.BatchMigrateRequest, p *Packet) (err error) {
+	for _, inode := range req.Inodes {
+		ir := mp.getInode(NewInode(inode, 0))
+		if (ir.Status != proto.OpOk) {
+			log.LogErrorf("BatchMigrate: get inode [%v] failed", inode)
+			err = errors.NewErrorf("inode not found")
+			p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+			return
+		}
+		if ino := ir.Msg; ino.IsMigrated() {
+			log.LogErrorf("BatchMigrate: inode [%v] has been migrated", inode)
+			err = errors.NewErrorf("has been migrated")
+			p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+			return
+		}
+	}
+	if err = mp.AddEcMigrationTask(req.Inodes); err != nil {
+		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
+		return
+	}
+	log.LogInfof("BatchMigrate [%v] success", req)
+	p.PacketErrorWithBody(0, nil)
 	return
 }
