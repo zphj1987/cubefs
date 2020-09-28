@@ -7,6 +7,7 @@ import (
 	"github.com/chubaofs/chubaofs/console/cutil"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/sdk/graphql/client"
+	"github.com/prometheus/common/log"
 	"github.com/samsarahq/thunder/graphql"
 	"github.com/samsarahq/thunder/graphql/schemabuilder"
 	"io/ioutil"
@@ -105,6 +106,8 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 		})
 	}
 
+	log.Info("================================{}", query.String())
+
 	dList := query.GetValue("data", "clusterView", "dataNodes").([]map[string]interface{})
 	for _, d := range dList {
 		ip := strings.Split(d["addr"].(string), ":")[0]
@@ -134,7 +137,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 		})
 	}
 
-	mList := query.GetValue("data", "clusterView", "dataNodes").([]map[string]interface{})
+	mList := query.GetValue("data", "clusterView", "metaNodes").([]map[string]interface{})
 	for _, m := range mList {
 		ip := strings.Split(m["addr"].(string), ":")[0]
 		get, err := http.Get(fmt.Sprintf("http://{}:{}/version", ip, ms.cfg.DataExporterPort))
