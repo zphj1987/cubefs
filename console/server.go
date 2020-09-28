@@ -26,11 +26,11 @@ type ConsoleNode struct {
 }
 
 func (c *ConsoleNode) Start(conf *config.Config) error {
-
 	cfg, err := cutil.NewConsoleConfig(conf)
 	if err != nil {
 		return fmt.Errorf("load console config has err:[%s]", err.Error())
 	}
+	c.cfg = cfg
 
 	if err := c.loadConfig(cfg); err != nil {
 		return err
