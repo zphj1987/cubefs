@@ -7,7 +7,7 @@ import (
 	"github.com/chubaofs/chubaofs/console/cutil"
 	"github.com/chubaofs/chubaofs/proto"
 	"github.com/chubaofs/chubaofs/sdk/graphql/client"
-	"github.com/prometheus/common/log"
+	"github.com/chubaofs/chubaofs/util/log"
 	"github.com/samsarahq/thunder/graphql"
 	"github.com/samsarahq/thunder/graphql/schemabuilder"
 	"io/ioutil"
@@ -106,7 +106,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 		})
 	}
 
-	log.Info("================================{}", query.String())
+	log.LogInfof("================================{}", query.String())
 
 	dList := query.GetValue("data", "clusterView", "dataNodes").([]map[string]interface{})
 	for _, d := range dList {
