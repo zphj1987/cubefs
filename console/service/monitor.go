@@ -310,5 +310,7 @@ func (ms *MonitorService) Schema() *graphql.Schema {
 	query.FieldFunc("RangeQueryURL", ms.RangeQueryURL)
 	query.FieldFunc("_empty", ms.empty)
 	query.FieldFunc("FuseClientList", ms.FuseClientList)
+	query.FieldFunc("VersionCheck", ms.VersionCheck)
+
 	return schema.MustBuild()
 }
