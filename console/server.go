@@ -21,18 +21,22 @@ import (
 )
 
 type ConsoleNode struct {
-	listen           string
-	masters          []string
-	objectNodeDomain string
-	server           *mux.Router
+	cfg    *cutil.ConsoleConfig
+	server *mux.Router
 }
 
-func (c *ConsoleNode) Start(cfg *config.Config) error {
+func (c *ConsoleNode) Start(conf *config.Config) error {
+
+	cfg, err := cutil.NewConsoleConfig(conf)
+	if err != nil {
+		return fmt.Errorf("load console config has err:[%s]", err.Error())
+	}
+
 	if err := c.loadConfig(cfg); err != nil {
 		return err
 	}
 
-	cli := client.NewMasterGClient(c.masters)
+	cli := client.NewMasterGClient(cfg.MasterAddr)
 	c.addProxy(proto.AdminUserAPI, cli)
 	c.addProxy(proto.AdminClusterAPI, cli)
 	c.addProxy(proto.AdminVolumeAPI, cli)
@@ -71,11 +75,10 @@ func (c *ConsoleNode) Start(cfg *config.Config) error {
 	loginService := service.NewLoginService(cli)
 	c.addHandle(proto.ConsoleLoginAPI, loginService.Schema(), loginService)
 
-	monitorService := service.NewMonitorService(cfg.GetString("monitor_addr"), cfg.GetString("monitor_app"), cfg.GetString("monitor_cluster"), cfg.GetString("dashboard_addr"))
+	monitorService := service.NewMonitorService(cfg, cli)
 	c.addHandle(proto.ConsoleMonitorAPI, monitorService.Schema(), monitorService)
-	c.addHandle("/jiankong", monitorService.Schema(), monitorService)
 
-	fileService := service.NewFileService(c.objectNodeDomain, c.masters, cli)
+	fileService := service.NewFileService(c.cfg.ObjectNodeDomain, c.cfg.MasterAddr, cli)
 	c.server.HandleFunc(proto.ConsoleFileDown, func(writer http.ResponseWriter, request *http.Request) {
 		if err := fileService.DownFile(writer, request); err != nil {
 			c.writeError(err, writer)
@@ -132,7 +135,7 @@ func (c ConsoleNode) Shutdown() {
 }
 
 func (c *ConsoleNode) Sync() {
-	if err := http.ListenAndServe(fmt.Sprintf(":%s", c.listen), c.server); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", c.cfg.Listen), c.server); err != nil {
 		log.LogErrorf("sync console has err:[%s]", err.Error())
 	}
 }
@@ -141,25 +144,21 @@ func NewServer() *ConsoleNode {
 	return &ConsoleNode{}
 }
 
-func (c *ConsoleNode) loadConfig(cfg *config.Config) (err error) {
+func (c *ConsoleNode) loadConfig(cfg *cutil.ConsoleConfig) (err error) {
 	// parse listen
-	c.listen = cfg.GetString(proto.ListenPort)
-	if len(c.listen) == 0 {
-		c.listen = "80"
+	if len(cfg.Listen) == 0 {
+		cfg.Listen = "80"
 	}
-	if match := regexp.MustCompile("^(\\d)+$").MatchString(c.listen); !match {
-		return fmt.Errorf("invalid listen configuration:[%s]", c.listen)
+	if match := regexp.MustCompile("^(\\d)+$").MatchString(cfg.Listen); !match {
+		return fmt.Errorf("invalid listen configuration:[%s]", cfg.Listen)
 	}
-	log.LogInfof("console loadConfig: setup config: %v(%v)", proto.ListenPort, c.listen)
+	log.LogInfof("console loadConfig: setup config: %v(%v)", proto.ListenPort, cfg.Listen)
 
 	// parse master config
-	c.masters = cfg.GetStringSlice(proto.MasterAddr)
-	if len(c.masters) == 0 {
+	if len(cfg.MasterAddr) == 0 {
 		return config.NewIllegalConfigError(proto.MasterAddr)
 	}
-	log.LogInfof("loadConfig: setup config: %v(%v)", proto.MasterAddr, strings.Join(c.masters, ","))
-
-	c.objectNodeDomain = cfg.GetString(proto.ObjectNodeDomain)
+	log.LogInfof("loadConfig: setup config: %v(%v)", proto.MasterAddr, strings.Join(cfg.MasterAddr, ","))
 
 	c.server = mux.NewRouter()
 

@@ -101,14 +101,13 @@ func (m *metadataManager) opMasterHeartbeat(conn net.Conn, p *Packet,
 	}
 	m.Range(func(id uint64, partition *MetaPartition) bool {
 		mConf := partition.GetBaseConfig()
-		log.LogDebugf("====xxx===metaPartition Report storeType: %v\n", mConf)
 		mpr := &proto.MetaPartitionReport{
 			PartitionID: mConf.PartitionId,
 			Start:       mConf.Start,
 			End:         mConf.End,
 			Status:      proto.ReadWrite,
 			StoreType:   mConf.StoreType,
-			MaxInodeID:  mConf.Cursor,
+			MaxInodeID:  mConf.MaxInode,
 			VolName:     mConf.VolName,
 			InodeCnt:    uint64(partition.inodeTree.Count()),
 			DentryCnt:   uint64(partition.inodeTree.Count()),
