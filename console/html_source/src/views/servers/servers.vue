@@ -3,15 +3,6 @@
     <div class="server-title" v-if="summary">
       <span>{{$t('chubaoFS.servers.Cluster')}}: {{summary.name}}<b>{{$t('chubaoFS.servers.TotalVolume')}} : {{summary.volumeCount}}</b></span>
       <el-button type="primary" class="ml50" @click="goServerList">{{$t('chubaoFS.servers.ServerList')}}</el-button>
-      <div class="partition-right">
-          <span>Version Check by Http Port:</span>
-          <el-input v-model="masterPort" placeholder style="width: 100px;"></el-input>
-          <el-button type="primary" class="ml5" @click="checkVersion(0)" >Master</el-button>
-          <el-input v-model="metaPort" placeholder style="width: 100px;"></el-input>
-          <el-button type="primary" class="ml5" @click="checkVersion(1)" >Meta</el-button>
-          <el-input v-model="dataPort" placeholder style="width: 100px;"></el-input>
-          <el-button type="primary" class="ml5" @click="checkVersion(2)" >Data</el-button>
-      </div>  
     </div>
     
     <div class="server-tree">
@@ -181,25 +172,6 @@ export default {
         setTimeout(function () {
           that.setNum()
         }, 20)
-      })
-    },
-    checkVersion(t) {
-      let port = ""
-      if (t == 0){
-        port = this.masterPort;
-      }else if (t ==1){
-        port = this.metaPort;
-      }else{
-        port = this.dataPort;
-      }
-
-      this.data.children[t].children.forEach(function(value){
-        let ip = value.label.split(":")[0];
-
-        this.apollo.query(this.url.cluster, baseGql.queryExpandAll, variables).then((res) => {
-          
-        })
-
       })
     }
   },
