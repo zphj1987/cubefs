@@ -1,12 +1,13 @@
 <template>
   <div class="cluster health">
+    <h3>Version Info</h3>
     <div class="data-block" v-loading="resData.loading">
       <el-table :data="resData.resLists" style="width: 100%">
-        <el-table-column prop="iP" :label="iP" width="150"></el-table-column>
-        <el-table-column prop="versionInfo.model" :label="model" width="100"></el-table-column>
-        <el-table-column prop="versionInfo.branchName" :label="branch" width="200"></el-table-column>
-        <el-table-column prop="versionInfo.commitID" :label="commitID" width="300"></el-table-column>
-        <el-table-column prop="message" :label="message"></el-table-column>
+        <el-table-column prop="iP" label="IP" ></el-table-column>
+        <el-table-column prop="versionInfo.model" label="model" :sortable="true" ></el-table-column>
+        <el-table-column prop="versionInfo.branchName" label="branch" ></el-table-column>
+        <el-table-column prop="versionInfo.commitID" label="commitID" width="300" :sortable="true"></el-table-column>
+        <el-table-column prop="message" label="message"></el-table-column>
       </el-table>
     </div>
   </div>

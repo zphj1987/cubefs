@@ -57,7 +57,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 
 	vi := proto.MakeVersion("console")
 	result = append(result, &MachineVersion{
-		IP:          "",
+		IP:          "self",
 		VersionInfo: &vi,
 		Message:     "success",
 	})
