@@ -12,7 +12,7 @@ export default {
     nav: {
       Overview: 'Overview',
       Servers: 'Servers',
-      Dashboard: 'Dashboard',
+      Health: 'Health',
       Volume: 'Volume',
       Operations: 'Operations',
       Alarm: 'Alarm',

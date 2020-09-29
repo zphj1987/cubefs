@@ -11,7 +11,7 @@ export default {
     nav: {
       Overview: '概览',
       Servers: '服务器',
-      Dashboard: '监控面板',
+      Health: '健康检查',
       Volume: '卷管理',
       Operations: '管理操作',
       Alarm: '告警',

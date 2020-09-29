@@ -86,6 +86,11 @@ const router = new Router({
       component: () => import('@/views/alarm.vue')
     },
     {
+      path: '/health',
+      name: 'health',
+      component: () => import('@/views/health.vue')
+    },
+    {
       path: '/authorization',
       name: 'authorization',
       component: () => import('@/views/authorization.vue')

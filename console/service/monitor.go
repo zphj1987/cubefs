@@ -79,7 +79,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 
 	for _, m := range ms.cfg.MasterAddr {
 		ip := strings.Split(m, ":")[0]
-		get, err := http.Get(fmt.Sprintf("http://{}/version", m))
+		get, err := http.Get(fmt.Sprintf("http://%s/version", m))
 		if err != nil {
 			result = append(result, ErrMachineVersion(ip, "master", err))
 			continue
@@ -108,7 +108,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 	dList := query.GetValue("clusterView", "dataNodes").([]interface{})
 	for _, d := range dList {
 		ip := strings.Split(d.(map[string]interface{})["addr"].(string), ":")[0]
-		get, err := http.Get(fmt.Sprintf("http://{}:{}/version", ip, ms.cfg.DataExporterPort))
+		get, err := http.Get(fmt.Sprintf("http://%s:%s/version", ip, ms.cfg.DataExporterPort))
 		if err != nil {
 			result = append(result, ErrMachineVersion(ip, "data", err))
 			continue
@@ -137,7 +137,7 @@ func (ms *MonitorService) VersionCheck(ctx context.Context, args struct{}) ([]*M
 	mList := query.GetValue("clusterView", "metaNodes").([]interface{})
 	for _, m := range mList {
 		ip := strings.Split(m.(map[string]interface{})["addr"].(string), ":")[0]
-		get, err := http.Get(fmt.Sprintf("http://{}:{}/version", ip, ms.cfg.DataExporterPort))
+		get, err := http.Get(fmt.Sprintf("http://%s:%s/version", ip, ms.cfg.DataExporterPort))
 		if err != nil {
 			result = append(result, ErrMachineVersion(ip, "meta", err))
 			continue

@@ -17,10 +17,6 @@
       <!--<i class="menuIcon3"></i>-->
       <!--<span slot="title">Dashboard</span>-->
       <!--</el-menu-item>-->
-      <el-menu-item @click="toDashboard">
-        <i class="menuIcon3"></i>
-        <span slot="title">{{ $t('chubaoFS.nav.Dashboard') }}</span>
-      </el-menu-item>
       <el-menu-item index="/volumeList">
         <i class="menuIcon4"></i>
         <span slot="title">{{ $t('chubaoFS.nav.Volume') }}</span>
@@ -36,6 +32,10 @@
       <el-menu-item index="/authorization">
         <i class="menuIcon7"></i>
         <span slot="title">{{ $t('chubaoFS.nav.Authorization') }}</span>
+      </el-menu-item>
+      <el-menu-item index="/health">
+        <i class="menuIcon3"></i>
+        <span slot="title">{{ $t('chubaoFS.nav.Health') }}</span>
       </el-menu-item>
       <div class="menu-link">
         <a class="github" href="https://github.com/chubaofs/chubaofs" target="_blank"></a>
@@ -64,26 +64,7 @@ export default {
     }
   },
   methods: {
-    toDashboard () {
-      if (!this.dashboardUrl) {
-        this.queryDashboard()
-      } else {
-        window.open(this.dashboardUrl)
-      }
-    },
-    queryDashboard () {
-      this.apollo.query(this.url.monitor, baseGql.dashboard, {}).then((res) => {
-        if (res.code || res.message) {
-          this.$message.error(res.message)
-          return
-        }
-        this.dashboardUrl = res.data.Dashboard
-        sessionStorage.setItem('dashboard_url', res.data.Dashboard)
-        window.open(this.dashboardUrl)
-      }).catch((error) => {
-        console.log(error)
-      })
-    }
+    
   },
   created () {
     this.dashboardUrl = sessionStorage.getItem('dashboard_url')
