@@ -26,7 +26,8 @@ type RocksTree struct {
 	dir            string
 	db             *gorocksdb.DB
 	currentApplyID uint64
-	sync.RWMutex
+	latch          [5]sync.Mutex
+	sync.Mutex
 }
 
 func DefaultRocksTree(dir string) (*RocksTree, error) {
@@ -223,6 +224,9 @@ func (r *RocksTree) GetBytes(key []byte) ([]byte, error) {
 
 // Has checks if the key exists in the btree.
 func (r *RocksTree) Put(count *uint64, countKey, key []byte, value []byte) error {
+	lock := r.latch[key[0]]
+	lock.Lock()
+	defer lock.Unlock()
 	has, err := r.HasKey(key)
 	if err != nil {
 		return err
@@ -235,8 +239,6 @@ func (r *RocksTree) Put(count *uint64, countKey, key []byte, value []byte) error
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
 
-	r.Lock()
-	defer r.Unlock()
 	if !has {
 		batch.Put(countKey, u64byte(atomic.LoadUint64(count)+1))
 	}
@@ -268,6 +270,9 @@ func (r *RocksTree) Update(key []byte, value []byte) error {
 }
 
 func (r *RocksTree) Create(count *uint64, countKey, key []byte, value []byte) error {
+	lock := r.latch[key[0]]
+	lock.Lock()
+	defer lock.Unlock()
 	has, err := r.HasKey(key)
 	if err != nil {
 		return err
@@ -281,8 +286,7 @@ func (r *RocksTree) Create(count *uint64, countKey, key []byte, value []byte) er
 	apply := make([]byte, 8)
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
-	r.Lock()
-	defer r.Unlock()
+
 	batch.Put(countKey, u64byte(atomic.LoadUint64(count)+1))
 	if err := r.db.Write(writeOption, batch); err != nil {
 		return err
@@ -293,7 +297,9 @@ func (r *RocksTree) Create(count *uint64, countKey, key []byte, value []byte) er
 
 // Has checks if the key exists in the btree. return is exist and err
 func (r *RocksTree) Delete(count *uint64, countKey, key []byte) (bool, error) {
-
+	lock := r.latch[key[0]]
+	lock.Lock()
+	defer lock.Unlock()
 	has, err := r.HasKey(key)
 	if err != nil {
 		return false, err
@@ -305,8 +311,7 @@ func (r *RocksTree) Delete(count *uint64, countKey, key []byte) (bool, error) {
 	apply := make([]byte, 8)
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
-	r.Lock()
-	defer r.Unlock()
+
 	if has {
 		batch.Put(countKey, u64byte(atomic.LoadUint64(count)-1))
 	}
