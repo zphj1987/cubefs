@@ -26,7 +26,7 @@ type RocksTree struct {
 	dir            string
 	db             *gorocksdb.DB
 	currentApplyID uint64
-	sync.Mutex
+	sync.RWMutex
 }
 
 func DefaultRocksTree(dir string) (*RocksTree, error) {
@@ -234,6 +234,9 @@ func (r *RocksTree) Put(count *uint64, countKey, key []byte, value []byte) error
 	apply := make([]byte, 8)
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
+
+	r.Lock()
+	defer r.Unlock()
 	if !has {
 		batch.Put(countKey, u64byte(atomic.LoadUint64(count)+1))
 	}
@@ -278,6 +281,8 @@ func (r *RocksTree) Create(count *uint64, countKey, key []byte, value []byte) er
 	apply := make([]byte, 8)
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
+	r.Lock()
+	defer r.Unlock()
 	batch.Put(countKey, u64byte(atomic.LoadUint64(count)+1))
 	if err := r.db.Write(writeOption, batch); err != nil {
 		return err
@@ -300,6 +305,8 @@ func (r *RocksTree) Delete(count *uint64, countKey, key []byte) (bool, error) {
 	apply := make([]byte, 8)
 	binary.BigEndian.PutUint64(apply, r.currentApplyID)
 	batch.Put(applyIDKey, apply)
+	r.Lock()
+	defer r.Unlock()
 	if has {
 		batch.Put(countKey, u64byte(atomic.LoadUint64(count)-1))
 	}
