@@ -551,6 +551,23 @@ func (b *MultipartRocks) Count() uint64 {
 	return b.count
 }
 
+// real count by type
+func (b *InodeRocks) RealCount() uint64 {
+	return b.IteratorCount(InodeType)
+}
+
+func (b *DentryRocks) RealCount() uint64 {
+	return b.IteratorCount(DentryType)
+}
+
+func (b *ExtendRocks) RealCount() uint64 {
+	return b.IteratorCount(ExtendType)
+}
+
+func (b *MultipartRocks) RealCount() uint64 {
+	return b.IteratorCount(MultipartType)
+}
+
 //Get
 func (b *InodeRocks) RefGet(ino uint64) (*Inode, error) {
 	return b.Get(ino)

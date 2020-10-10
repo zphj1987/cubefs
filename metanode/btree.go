@@ -93,6 +93,7 @@ type InodeTree interface {
 	Delete(ino uint64) (bool, error)
 	Range(start, end *Inode, cb func(v []byte) (bool, error)) error
 	Count() uint64
+	RealCount() uint64
 	GetMaxInode() (uint64, error)
 }
 
@@ -104,6 +105,7 @@ type DentryTree interface {
 	Create(dentry *Dentry) error
 	Delete(pid uint64, name string) (bool, error)
 	Range(start, end *Dentry, cb func(v []byte) (bool, error)) error
+	RealCount() uint64
 	Count() uint64
 }
 
@@ -116,6 +118,7 @@ type ExtendTree interface {
 	Create(ext *Extend) error
 	Delete(ino uint64) (bool, error)
 	Range(start, end *Extend, cb func(v []byte) (bool, error)) error
+	RealCount() uint64
 	Count() uint64
 }
 
@@ -128,5 +131,6 @@ type MultipartTree interface {
 	Create(mul *Multipart) error
 	Delete(key, id string) (bool, error)
 	Range(start, end *Multipart, cb func(v []byte) (bool, error)) error
+	RealCount() uint64
 	Count() uint64
 }

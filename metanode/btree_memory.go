@@ -511,6 +511,11 @@ func (i *BTree) Count() uint64 {
 	return uint64(i.Len())
 }
 
+// real count by type
+func (i *BTree) RealCount() uint64 {
+	return uint64(i.Len())
+}
+
 // Len returns the total number of items in the btree.
 func (b *BTree) Len() (size int) {
 	b.RLock()

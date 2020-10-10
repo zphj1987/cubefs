@@ -105,6 +105,7 @@ func (m *MetaNode) getPartitionByIDHandler(w http.ResponseWriter, r *http.Reques
 		resp.Msg = err.Error()
 		return
 	}
+
 	mp, err := m.metadataManager.GetPartition(pid)
 	if err != nil {
 		resp.Code = http.StatusNotFound
@@ -118,6 +119,26 @@ func (m *MetaNode) getPartitionByIDHandler(w http.ResponseWriter, r *http.Reques
 	msg["peers"] = conf.Peers
 	msg["nodeId"] = conf.NodeId
 	msg["cursor"] = conf.Cursor
+
+	if r.FormValue("count") != "" {
+		msg["inode"] = map[string]uint64{
+			"count":     mp.inodeTree.Count(),
+			"realCount": mp.inodeTree.RealCount(),
+		}
+		msg["dentry"] = map[string]uint64{
+			"count":     mp.dentryTree.Count(),
+			"realCount": mp.dentryTree.RealCount(),
+		}
+		msg["extend"] = map[string]uint64{
+			"count":     mp.extendTree.Count(),
+			"realCount": mp.extendTree.RealCount(),
+		}
+		msg["multipart"] = map[string]uint64{
+			"count":     mp.multipartTree.Count(),
+			"realCount": mp.multipartTree.RealCount(),
+		}
+	}
+
 	resp.Data = msg
 	resp.Code = http.StatusOK
 	resp.Msg = http.StatusText(http.StatusOK)
