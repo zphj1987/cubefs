@@ -150,6 +150,7 @@ const (
 	cfgZoneName          = "zoneName"
 	cfgStoreType         = "storeType"
 	cfgIdleInodeMultiple = "idleInodeMultiple"
+	cfgTickIntervalMs    = "tickIntervalMs"
 
 	metaNodeDeleteBatchCountKey = "batchCount"
 )

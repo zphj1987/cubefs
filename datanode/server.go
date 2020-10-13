@@ -56,8 +56,9 @@ const (
 	DefaultRaftDir          = "raft"
 	DefaultRaftLogsToRetain = 10 // Count of raft logs per data partition
 	DefaultDiskMaxErr       = 1
-	DefaultDiskRetainMin    = 5 * util.GB  // GB
-	DefaultDiskRetainMax    = 30 * util.GB // GB
+	DefaultDiskRetainMin    = 5 * util.GB      // GB
+	DefaultDiskRetainMax    = 30 * util.GB     // GB
+	cfgTickIntervalMs       = "tickIntervalMs" // int
 )
 
 const (
@@ -88,9 +89,9 @@ type DataNode struct {
 	raftHeartbeat   string
 	raftReplica     string
 	raftStore       raftstore.RaftStore
-
-	tcpListener net.Listener
-	stopC       chan bool
+	tickInterval    int
+	tcpListener     net.Listener
+	stopC           chan bool
 
 	control common.Control
 }
@@ -196,10 +197,16 @@ func (s *DataNode) parseConfig(cfg *config.Config) (err error) {
 	if s.zoneName == "" {
 		s.zoneName = DefaultZoneName
 	}
+	s.tickInterval = int(cfg.GetFloat(cfgTickIntervalMs))
+	if s.tickInterval <= 300 {
+		log.LogWarnf("get config [%s]:[%v] less than 300 so set it to 500 ", cfgTickIntervalMs, cfg.GetString(cfgTickIntervalMs))
+		s.tickInterval = 500
+	}
 
 	log.LogDebugf("action[parseConfig] load masterAddrs(%v).", MasterClient.Nodes())
 	log.LogDebugf("action[parseConfig] load port(%v).", s.port)
 	log.LogDebugf("action[parseConfig] load zoneName(%v).", s.zoneName)
+	log.LogDebugf("action[parseConfig] load tickInterval(%v).", s.tickInterval)
 	return
 }
 

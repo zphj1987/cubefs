@@ -56,6 +56,7 @@ type MetaNode struct {
 	raftStore         raftstore.RaftStore
 	raftHeartbeatPort string
 	raftReplicatePort string
+	tickInterval      int
 	zoneName          string
 	idleInodeMultiple uint64
 	httpStopC         chan uint8
@@ -175,6 +176,12 @@ func (m *MetaNode) parseConfig(cfg *config.Config) (err error) {
 	m.raftReplicatePort = cfg.GetString(cfgRaftReplicaPort)
 	m.zoneName = cfg.GetString(cfgZoneName)
 
+	m.tickInterval = int(cfg.GetFloat(cfgTickIntervalMs))
+	if m.tickInterval <= 300 {
+		log.LogWarnf("get config [%s]:[%v] less than 300 so set it to 500 ", cfgTickIntervalMs, cfg.GetString(cfgTickIntervalMs))
+		m.tickInterval = 500
+	}
+
 	if cfg.GetString(cfgStoreType) != "" {
 		if storeType, err := strconv.ParseUint(cfg.GetString(cfgStoreType), 10, 64); err != nil {
 			return err
@@ -244,6 +251,7 @@ func (m *MetaNode) parseConfig(cfg *config.Config) (err error) {
 	log.LogInfof("[parseConfig] load raftHeartbeatPort[%v].", m.raftHeartbeatPort)
 	log.LogInfof("[parseConfig] load raftReplicatePort[%v].", m.raftReplicatePort)
 	log.LogInfof("[parseConfig] load zoneName[%v].", m.zoneName)
+	log.LogInfof("[parseConfig] load tickIntervalMs[%v].", m.tickInterval)
 
 	addrs := cfg.GetSlice(proto.MasterAddr)
 	masters := make([]string, 0, len(addrs))
