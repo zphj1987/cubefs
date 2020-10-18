@@ -156,6 +156,7 @@ export default {
         title: 'MetaPartition Management',
         PartitionID: 'ID',
         dentryCount: 'Dentry Count',
+        inodeCount: 'Inode Count',
         start: 'Start',
         end: 'End',
         storeType: 'StoreType',

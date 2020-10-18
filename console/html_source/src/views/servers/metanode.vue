@@ -52,7 +52,7 @@
 
 <script>
 import baseGql from '../../graphql/server'
-import { formatSize } from '../../utils/string.js'
+import { formatSize, formatStoreType } from '../../utils/string.js'
 export default {
   name: 'alarm',
   data () {
@@ -90,6 +90,7 @@ export default {
         eachItem.toMetaNode.used = formatSize((eachItem.toMetaNode.used ), 10)
         eachItem.toMetaNode.total = formatSize((eachItem.toMetaNode.total), 10)
         eachItem.toMetaNode.ratio = parseFloat((eachItem.toMetaNode.ratio * 100).toFixed(2))
+        eachItem.storeType = formatStoreType(eachItem.storeType)
         const reportTime = eachItem.toMetaNode.reportTime
         eachItem.toMetaNode.reportTime = reportTime.slice(0, reportTime.indexOf('.')).replace('T', ' ')
       })

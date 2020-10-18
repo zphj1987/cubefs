@@ -10,6 +10,7 @@
       <el-table :data="resData.resLists" class="mt10" style="width: 100%">
         <el-table-column prop="partitionID" :label="$t('chubaoFS.operations.MetaPartitionManagement.PartitionID')"></el-table-column>
         <el-table-column prop="dentryCount" :label="$t('chubaoFS.operations.MetaPartitionManagement.dentryCount')"></el-table-column>
+        <el-table-column prop="inodeCount" :label="$t('chubaoFS.operations.MetaPartitionManagement.inodeCount')"></el-table-column>
         <el-table-column prop="isRecover" :label="$t('chubaoFS.operations.MetaPartitionManagement.isRecover')"></el-table-column>
         <el-table-column prop="replicaNum" :label="$t('chubaoFS.operations.MetaPartitionManagement.replicaNum')"></el-table-column>
         <el-table-column prop="status" :label="$t('chubaoFS.operations.MetaPartitionManagement.status')"></el-table-column>
@@ -119,7 +120,7 @@
 <script>
 import baseGql from "../../graphql/operations";
 import { date2Str, time2Str } from "../../utils/dateTime.js";
-import { formatStatus } from "../../utils/string.js";
+import { formatStatus, formatStoreType } from "../../utils/string.js";
 export default {
   name: "metaPartitionManagement",
   data() {
@@ -209,6 +210,7 @@ export default {
               item.status = formatStatus(item.status);
               item.isRecover = item.isRecover.toString();
               item.replicaNum = item.replicaNum +"/"+ item.peers.length ;
+              item.storeType = formatStoreType(item.storeType)
               if(item.missNodes == undefined || item.missNodes == null || item.missNodes.length ==0){
                 item.missNodes = "none";
               }else{

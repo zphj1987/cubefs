@@ -94,7 +94,7 @@ type InodeTree interface {
 	Range(start, end *Inode, cb func(v []byte) (bool, error)) error
 	Count() uint64
 	RealCount() uint64
-	GetMaxInode() (uint64, error)
+	GetMaxInode() (uint64, error) //TODO: ANSJ
 }
 
 type DentryTree interface {

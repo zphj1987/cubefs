@@ -40,3 +40,8 @@ export function formatSize (bytes, decimals) {
 export function formatStatus(status){
   return status==1?"ReadOnly":status==2?"ReadWrite":"Unavailable"
 }
+
+
+export function formatStoreType(type){
+  return type==1?"Disk":"Mem"
+}

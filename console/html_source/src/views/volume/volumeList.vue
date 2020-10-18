@@ -309,6 +309,7 @@ import { date2Str, time2Str } from "../../utils/dateTime.js";
 export default {
   name: "volumeList",
   data() {
+    var mpStoreTypeList = ["Mem", "Disk"];
     return {
       labelPosition: "top",
       searchVal: "",
@@ -337,17 +338,17 @@ export default {
       grantPermissionDialog: false,
       editPermissionDialog: false,
       editVolumeForm: {},
+      mpStoreTypeList: mpStoreTypeList,
       createVolumeForm: {
         name: "",
         totalCapacity: null,
         dpReplicaNum: null,
         owner: "",
         zoneName: "default",
-        storeType: 1,
+        storeType: mpStoreTypeList[0],
         notes: "",
       },
       userID: null,
-      mpStoreTypeList: [0, 1],
       dpReplicaNumList: ["2", "3"],
       extendCapacity: null,
       rules: {
@@ -493,7 +494,7 @@ export default {
             dpReplicaNum: 3,
             enableToken: false,
             followerRead: false,
-            storeType: parseInt(this.createVolumeForm.storeType),
+            storeType: this.createVolumeForm.storeType == this.mpStoreTypeList[0]?0:this.createVolumeForm.storeType == this.mpStoreTypeList[1]?1:parseInt(this.createVolumeForm.storeType),
             mpCount: 0,
             name: this.createVolumeForm.name,
             owner: this.userID,

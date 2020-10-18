@@ -156,6 +156,7 @@ export default {
         title: '元数据分片管理',
         PartitionID: 'ID',
         dentryCount: '文件数',
+        inodeCount: '节点数',
         start: '开始',
         end: '结束',
         storeType: '存储类型',

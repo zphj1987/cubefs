@@ -124,6 +124,7 @@ const baseGql = {
     metaPartitionList{
       partitionID
       dentryCount
+      inodeCount
       start
       end
       hosts

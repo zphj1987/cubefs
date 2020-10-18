@@ -550,6 +550,7 @@ func (mp *MetaPartition) nextInodeID() (inodeId uint64, err error) {
 
 	if newID > mp.config.End {
 		if mp.inodeTree.Count()*mp.config.IdleInodeMultiple > mp.config.End-mp.config.Start {
+			log.LogErrorf("create inode ID has out of range count:[%d] idleInodeMutiple:[%d]", mp.inodeTree.Count(), mp.config.IdleInodeMultiple)
 			return 0, ErrInodeIDOutOfRange
 		}
 		mp.config.MaxInode = mp.config.End
