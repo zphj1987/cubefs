@@ -125,6 +125,12 @@ func (m *MetaNode) getPartitionByIDHandler(w http.ResponseWriter, r *http.Reques
 	msg["peers"] = conf.Peers
 	msg["nodeId"] = conf.NodeId
 	msg["cursor"] = conf.Cursor
+	msg["inode_count"] = mp.GetInodeTree().Len()
+	msg["dentry_count"] = mp.GetDentryTree().Len()
+	msg["multipart_count"] = mp.(*metaPartition).multipartTree.Len()
+	msg["extend_count"] = mp.(*metaPartition).extendTree.Len()
+	msg["free_list_count"] = mp.(*metaPartition).freeList.Len()
+	_, msg["leader"] = mp.IsLeader()
 	resp.Data = msg
 	resp.Code = http.StatusOK
 	resp.Msg = http.StatusText(http.StatusOK)
