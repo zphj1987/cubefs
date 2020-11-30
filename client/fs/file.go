@@ -224,9 +224,8 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 	var waitForFlush, enSyncWrite bool
 	if isDirectIOEnabled(req.FileFlags) || (req.FileFlags&fuse.OpenSync != 0) {
 		waitForFlush = true
-		enSyncWrite = f.super.enSyncWrite
 	}
-
+	enSyncWrite = f.super.enSyncWrite
 	start := time.Now()
 
 	metric := exporter.NewTPCnt("filewrite")
