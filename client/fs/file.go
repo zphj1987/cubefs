@@ -272,7 +272,7 @@ func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
 	start := time.Now()
 
 	if metrics != nil {
-		m := metrics.MetricFuseOpTpc.GetWithLabelVals("filesync")
+		m := metrics.MetricFuseOpTpc.GetWithLabelVals("fileFlush")
 		defer m.CountWithError(err)
 	}
 
@@ -292,6 +292,10 @@ func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
 func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
 	log.LogDebugf("TRACE Fsync enter: ino(%v)", f.info.Inode)
 	start := time.Now()
+	if metrics != nil {
+		m := metrics.MetricFuseOpTpc.GetWithLabelVals("fileFsync")
+		defer m.CountWithError(err)
+	}
 	err = f.super.ec.Flush(f.info.Inode)
 	if err != nil {
 		msg := fmt.Sprintf("Fsync: ino(%v) err(%v)", f.info.Inode, err)
