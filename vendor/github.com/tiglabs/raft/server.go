@@ -55,6 +55,8 @@ func NewRaftServer(config *Config) (*RaftServer, error) {
 		rs.config.transport = transport
 	}
 
+	RegisterMetrics()
+
 	util.RunWorkerUtilStop(rs.run, rs.stopc)
 	return rs, nil
 }

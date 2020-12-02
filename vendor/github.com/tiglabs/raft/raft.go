@@ -18,6 +18,7 @@ package raft
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -268,6 +269,7 @@ func (s *raft) run() {
 
 	loopCount := 0
 	var readyc chan struct{}
+	var metric *exporter.TPCMetric
 	for {
 		if readyc == nil && s.containsUpdate() {
 			readyc = s.readyc
@@ -319,11 +321,23 @@ func (s *raft) run() {
 					logger.Error("raft[%v] step EntryConfChange: index(%v) term(%v)", s.raftFsm.id, entry.Index, entry.Term)
 				}
 			}
+
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("prop", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
+
 			s.raftFsm.Step(msg)
+
+			if metric != nil {
+				metric.Count()
+			}
 
 		case m := <-s.recvc:
 			if _, ok := s.raftFsm.replicas[m.From]; ok || (!m.IsResponseMsg() && m.Type != proto.ReqMsgVote) ||
 				(m.Type == proto.ReqMsgVote && s.raftFsm.raftLog.isUpToDate(m.Index, m.LogTerm, 0, 0)) {
+				if exporter.IsEnabled() {
+					metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("recv", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+				}
 				switch m.Type {
 				case proto.ReqMsgHeartBeat:
 					if s.raftFsm.leader == m.From && m.From != s.config.NodeID {
@@ -341,14 +355,26 @@ func (s *raft) run() {
 					respErr = false
 				}
 				s.maybeChange(respErr)
+				if metric != nil {
+					metric.Count()
+				}
 			} else if logger.IsEnableWarn() && m.Type != proto.RespMsgHeartBeat {
 				logger.Warn("[raft][%v term: %d] ignored a %s message without the replica from [%v term: %d].", s.raftFsm.id, s.raftFsm.term, m.Type, m.From, m.Term)
 			}
 
 		case snapReq := <-s.snapRecvc:
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("snapReq", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
 			s.handleSnapshot(snapReq)
+			if metric != nil {
+				metric.Count()
+			}
 
 		case <-readyc:
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("ready", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
 			s.persist()
 			s.apply()
 			s.advance()
@@ -359,6 +385,9 @@ func (s *raft) run() {
 					continue
 				}
 				s.sendMessage(msg)
+			}
+			if metric != nil {
+				metric.Count()
 			}
 			s.raftFsm.msgs = nil
 			readyc = nil
@@ -373,8 +402,14 @@ func (s *raft) run() {
 			msg.Type = proto.LocalMsgHup
 			msg.From = s.config.NodeID
 			msg.ForceVote = true
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("elect", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
 			s.raftFsm.Step(msg)
 			s.maybeChange(true)
+			if metric != nil {
+				metric.Count()
+			}
 
 		case c := <-s.statusc:
 			c <- s.getStatus()
@@ -395,6 +430,9 @@ func (s *raft) run() {
 
 		case future := <-s.readIndexC:
 			futures := []*Future{future}
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("readIndex", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
 			// handle in batch
 			var flag bool
 			for i := 1; i < 64; i++ {
@@ -409,9 +447,18 @@ func (s *raft) run() {
 				}
 			}
 			s.raftFsm.addReadIndex(futures)
+			if metric != nil {
+				metric.Count()
+			}
 
 		case req := <-s.entryRequestC:
+			if exporter.IsEnabled() {
+				metric = Metrics().MetricRaftOpTpc.GetWithLabelVals("entryReq", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+			}
 			s.getEntriesInLoop(req)
+			if metric != nil {
+				metric.Count()
+			}
 		}
 	}
 }
@@ -649,6 +696,12 @@ func (s *raft) maybeChange(respErr bool) {
 
 func (s *raft) persist() {
 	unstableEntries := s.raftFsm.raftLog.unstableEntries()
+
+	if exporter.IsEnabled() {
+		metric := Metrics().MetricRaftOpTpc.GetWithLabelVals("persist", strconv.FormatUint(s.raftFsm.id, 10), strconv.FormatUint(s.raftFsm.term, 10))
+		defer metric.Count()
+	}
+
 	if len(unstableEntries) > 0 {
 		if err := s.raftConfig.Storage.StoreEntries(unstableEntries); err != nil {
 			panic(AppPanicError(fmt.Sprintf("[raft->persist][%v] storage storeEntries err: [%v].", s.raftFsm.id, err)))
