@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	MetricRaftOpLabelKeys = []string{"op", "id", "term"}
+	MetricRaftOpLabelKeys = []string{"op"}
 )
 
 type RaftMetrics struct {

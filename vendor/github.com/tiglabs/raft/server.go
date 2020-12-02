@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chubaofs/chubaofs/util/exporter"
 	"github.com/tiglabs/raft/logger"
 	"github.com/tiglabs/raft/proto"
 	"github.com/tiglabs/raft/util"
@@ -169,6 +170,10 @@ func (rs *RaftServer) Submit(id uint64, cmd []byte) (future *Future) {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]
 	rs.mu.RUnlock()
+	if exporter.IsEnabled() {
+		metric := Metrics().MetricRaftOpTpc.GetWithLabelVals("submit")
+		defer metric.Count()
+	}
 
 	future = newFuture()
 	if !ok {

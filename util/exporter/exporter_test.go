@@ -58,28 +58,21 @@ func TestNewTPCntVec(t *testing.T) {
 	if tpv == nil {
 		t.Logf("tpv is nil ")
 	}
-	t.Logf("tpv is ok ")
 
 	N := 100
 	m1 := NewTPCntVec("metric_tpcnt_vec", "", []string{"count"})
 	if m1 == nil {
 		t.Logf("tpcv is nil ")
 	}
-	t.Logf("tpcv: %p, %p", m1, m1.tpv)
 	exitCh := make(chan int64, N)
 	for i := 0; i < N; i++ {
 		go func(i int64) {
 			if m1 == nil {
 				t.Logf("tpcv go is nil ")
 			}
-			t.Logf("tpcv go1: %p, %p, %p", m1, m1.tpv, m1.cntv)
-			m := m1.GetWithLabelVals([]string{fmt.Sprintf("%d", i)})
-			t.Logf("tpcv go2: %p, %p, %p", m1, m1.tpv, m1.cntv)
+			m := m1.GetWithLabelVals(fmt.Sprintf("%d", i))
 			if m != nil {
-				t.Logf("tpcv go3: %p, %p, %p", m1, m1.tpv, m1.cntv)
 				m.Count()
-				t.Logf("tpcv go1: %p, %p, %p")
-				//t.Logf("metric: %v", m.tp.metric.Desc().String())
 			}
 			exitCh <- i
 		}(int64(i))
