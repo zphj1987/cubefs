@@ -128,7 +128,7 @@ func main() {
 	exporter.Init(ModuleName, cfg)
 
 	level := parseLogLevel(opt.Loglvl)
-	_, err = log.InitLog(opt.Logpath, LoggerPrefix, level, nil)
+	_, err = log.InitLog(opt.Logpath, opt.Volname, level, nil)
 	if err != nil {
 		daemonize.SignalOutcome(err)
 		os.Exit(1)
