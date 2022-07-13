@@ -79,9 +79,9 @@ Small file operation performance and scalability benchmark test by [mdtest](http
 Refer to [cubefs.readthedocs.io](https://cubefs.readthedocs.io/en/latest/evaluation.html) for performance and scalability of `IO` and `Metadata`.
 
 ## Setup CubeFS 
-[how to set up and query a small CubeFS cluster](https://github.com/cubefs/cubefs/blob/master/INSTALL.md) 
+[How to set up and query a small CubeFS cluster](https://github.com/leonrayang/cubefs/blob/leonrayang/master/INSTALL.md) 
 
-[Helm chart to Run a CubeFS Cluster in Kubernetes](https://github.com/cubefs/cubefs/blob/master/INSTALL.md)
+[Helm chart to Run a CubeFS Cluster in Kubernetes](https://github.com/leonrayang/cubefs/blob/leonrayang/master/HELM.md)
 
 ## Reference
 
